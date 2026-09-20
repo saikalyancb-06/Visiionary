@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "total_payloads_inspected": 14,
+  "pii_leaks_count": 0,
+  "forbidden_tokens_checked": 7,
+  "fail_closed_verified": true
+}

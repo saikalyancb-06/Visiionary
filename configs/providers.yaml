@@ -1,0 +1,14 @@
+﻿providers:
+  primary: "mock"
+  failover_order:
+    - "mock"
+    - "cloudflare"
+    - "openrouter"
+    - "groq"
+    - "ollama_local"
+  models:
+    cloudflare: "@cf/google/gemma-4-26b-a4b-it"
+    openrouter: "meta-llama/llama-3.3-70b-instruct:free"
+    groq: "llama-3.3-70b-versatile"
+    ollama_local: "gemma:2b"
+  timeout_seconds: 20

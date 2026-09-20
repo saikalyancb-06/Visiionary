@@ -1,0 +1,23 @@
+﻿modes:
+  FAST:
+    description: "DOM text + rules + NER only. No OCR, no screenshot."
+    target_overhead_ms: 500
+    capture_screenshot: false
+    enable_ocr: false
+    enable_visual_detector: false
+    redaction_style: "placeholder"
+  BALANCED:
+    description: "DOM rules + NER + OCR on canvas/images + face detector + redacted screenshot."
+    target_overhead_ms: 1500
+    capture_screenshot: true
+    enable_ocr: true
+    enable_visual_detector: true
+    redaction_style: "solid_opaque"
+  STRICT:
+    description: "Full-screenshot box detector + OCR everywhere + redact-all opaque regions (iframes/canvas)."
+    target_overhead_ms: 4000
+    capture_screenshot: true
+    enable_ocr: true
+    enable_visual_detector: true
+    redact_all_opaque: true
+    redaction_style: "solid_opaque"
