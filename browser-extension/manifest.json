@@ -6,16 +6,24 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "storage",
-    "offscreen"
+    "storage"
   ],
   "host_permissions": [
     "http://127.0.0.1:*/*",
-    "http://localhost:*/*"
+    "http://localhost:*/*",
+    "file://*/*"
   ],
-  "background": {
-    "service_worker": "src/background/background.js"
-  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1/*",
+        "http://localhost/*",
+        "file://*/*"
+      ],
+      "js": ["src/content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "src/ui/popup.html",
     "default_title": "PS26171 Agent"
