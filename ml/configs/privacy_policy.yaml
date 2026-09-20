@@ -1,0 +1,82 @@
+﻿version: "1.0"
+fail_closed: true
+confidence_threshold: 0.75
+redaction_padding_px: 4
+redaction_style: "solid_opaque"  # solid_opaque | blur | pixelate
+
+rules:
+  person_name:
+    action: "REDACT"
+    placeholder: "[REDACTED_NAME]"
+    fill_color: "#000000"
+  email:
+    action: "REDACT"
+    placeholder: "[REDACTED_EMAIL]"
+    fill_color: "#000000"
+  phone:
+    action: "REDACT"
+    placeholder: "[REDACTED_PHONE]"
+    fill_color: "#000000"
+  address:
+    action: "REDACT"
+    placeholder: "[REDACTED_ADDRESS]"
+    fill_color: "#000000"
+  dob:
+    action: "REDACT"
+    placeholder: "[REDACTED_DOB]"
+    fill_color: "#000000"
+  gov_id:
+    action: "REDACT"
+    placeholder: "[REDACTED_ID]"
+    fill_color: "#000000"
+  card_number:
+    action: "REDACT"
+    placeholder: "[REDACTED_CARD]"
+    fill_color: "#000000"
+  cvv:
+    action: "REDACT"
+    placeholder: "[REDACTED_CARD]"
+    fill_color: "#000000"
+  bank_account:
+    action: "REDACT"
+    placeholder: "[REDACTED_ACCOUNT]"
+    fill_color: "#000000"
+  ifsc:
+    action: "REDACT"
+    placeholder: "[REDACTED_ACCOUNT]"
+    fill_color: "#000000"
+  upi:
+    action: "REDACT"
+    placeholder: "[REDACTED_ACCOUNT]"
+    fill_color: "#000000"
+  balance:
+    action: "REDACT"
+    placeholder: "[REDACTED_AMOUNT]"
+    fill_color: "#000000"
+  password:
+    action: "REDACT"
+    placeholder: "[REDACTED_SECRET]"
+    fill_color: "#000000"
+  otp:
+    action: "REDACT"
+    placeholder: "[REDACTED_SECRET]"
+    fill_color: "#000000"
+  token:
+    action: "REDACT"
+    placeholder: "[REDACTED_TOKEN]"
+    fill_color: "#000000"
+  face:
+    action: "REDACT"
+    placeholder: null
+    fill_color: "#000000"
+  qr_code:
+    action: "REDACT"
+    placeholder: null
+    fill_color: "#000000"
+  unknown_uncertain:
+    action: "REDACT"
+    placeholder: "[REDACTED_UNCERTAIN]"
+    fill_color: "#000000"
+  safe_ui:
+    action: "PRESERVE"
+    placeholder: null

@@ -1,0 +1,2 @@
+﻿claim_id,claim_text,metric,claimed_value,unit,experiment_id,source_file,script_used,date_measured,hardware,verified_by
+# NOTE: Iron Rule 1 - All metrics must originate from raw result files produced by benchmark scripts.

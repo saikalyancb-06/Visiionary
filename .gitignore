@@ -1,0 +1,35 @@
+﻿# Git ignore for SIH 2026 PS 26171 Browser Agent
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+node_modules/
+dist/
+build/
+.cache/
+
+# Large Datasets & Raw Data (Never commit large raw data)
+data/raw/
+data/processed/
+*.tar.gz
+*.zip
+*.parquet
+
+# Model weights
+models/checkpoints/
+*.pt
+*.pth
+*.bin
+*.onnx
+
+# Environment & Secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Logs & temp
+logs/*.log
+*.tmp
+.DS_Store
+Thumbs.db
