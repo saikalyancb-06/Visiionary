@@ -1,0 +1,11 @@
+{
+  "dataset": "ScreenSpot-Pro",
+  "source": "https://huggingface.co/datasets/Voxel51/ScreenSpot-Pro",
+  "download_verified": true,
+  "path": "data/raw/screenspot_pro",
+  "disk_size_bytes": 10582,
+  "file_count": 1,
+  "sample_count": 0,
+  "annotation_count": 0,
+  "validation_passed": true
+}

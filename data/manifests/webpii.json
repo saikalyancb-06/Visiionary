@@ -1,11 +1,11 @@
 {
-  "dataset_id": "webpii",
-  "name": "WebPII",
-  "source_url": "Synthetic & Curated Web PII Corpus",
-  "license": "MIT / Synthetic",
-  "purpose": "Visual PII detection (names, emails, phones, credentials)",
-  "status": "active",
-  "notes": "Curated visual PII with exact bounding boxes",
-  "samples_count": 0,
-  "checksums": {}
+  "dataset": "WebPII",
+  "source": "https://huggingface.co/datasets/WebPII/webpii",
+  "download_verified": true,
+  "path": "data/raw/webpii",
+  "disk_size_bytes": 286251683,
+  "file_count": 3,
+  "sample_count": 2341,
+  "annotation_count": 25751,
+  "validation_passed": true
 }

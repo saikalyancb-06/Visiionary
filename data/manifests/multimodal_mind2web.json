@@ -1,0 +1,11 @@
+{
+  "dataset": "Multimodal-Mind2Web",
+  "source": "https://huggingface.co/datasets/osunlp/Multimodal-Mind2Web",
+  "download_verified": true,
+  "path": "data/raw/multimodal_mind2web/data",
+  "disk_size_bytes": 303918731,
+  "file_count": 1,
+  "sample_count": 370,
+  "annotation_count": 370,
+  "validation_passed": true
+}

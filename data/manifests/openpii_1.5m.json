@@ -1,0 +1,11 @@
+{
+  "dataset": "OpenPII 1.5M",
+  "source": "https://huggingface.co/datasets/ai4privacy/pii-masking-openpii-1.5m",
+  "download_verified": true,
+  "path": "data/raw/openpii_1.5m/data",
+  "disk_size_bytes": 5335260499,
+  "file_count": 2,
+  "sample_count": 1636375,
+  "annotation_count": 1636375,
+  "validation_passed": true
+}
