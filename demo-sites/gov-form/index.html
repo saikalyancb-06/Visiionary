@@ -1,0 +1,53 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GovSecure Portal - Aadhaar / PAN Verification</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 24px; color: #1e293b; }
+    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; border: 1px solid #cbd5e1; padding: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+    .header { border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 20px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 6px; color: #334155; }
+    input[type="text"], input[type="password"] { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #94a3b8; border-radius: 4px; font-size: 14px; }
+    .btn { background: #0284c7; color: white; border: none; padding: 12px 24px; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; background: #e0f2fe; color: #0369a1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>National Service Portal <span class="badge">SECURE</span></h2>
+      <p style="margin: 0; font-size: 13px; color: #64748b;">Government Identity Verification & Citizen Services (राष्ट्रीय पहचान पोर्टल)</p>
+    </div>
+
+    <form id="gov-form" onsubmit="event.preventDefault(); document.getElementById('result').style.display='block';">
+      <div class="form-group">
+        <label>Aadhaar Number (आधार संख्या) - 12 Digits</label>
+        <input type="text" id="aadhaar-input" data-pii="gov_id" placeholder="XXXX XXXX XXXX" value="5481 9201 3847" />
+      </div>
+
+      <div class="form-group">
+        <label>PAN Identifier (स्थायी खाता संख्या) - 10 Characters</label>
+        <input type="text" id="pan-input" data-pii="gov_id" placeholder="ABCDE1234F" value="ABCDE1234F" />
+      </div>
+
+      <div class="form-group">
+        <label>Registered Mobile Number (पंजीकृत मोबाइल नंबर)</label>
+        <input type="text" id="mobile-input" data-pii="phone" value="+91 98112 34567" />
+      </div>
+
+      <div class="form-group">
+        <label>Authentication OTP (वन टाइम पासवर्ड)</label>
+        <input type="password" id="otp-input" autocomplete="one-time-code" data-pii="otp" value="849201" />
+      </div>
+
+      <button type="submit" id="btn-submit-verify" class="btn">Verify & Proceed (सत्यापित करें)</button>
+    </form>
+
+    <div id="result" style="display: none; margin-top: 16px; padding: 12px; background: #f0fdf4; border-left: 4px solid #22c55e; color: #15803d; font-weight: bold;">
+      ✓ Citizen Identity Verified Successfully.
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,24 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Offscreen Inference Worker</title>
+</head>
+<body>
+  <h2>PS26171 Offscreen Inference Runtime</h2>
+  <script type="module">
+    // Offscreen document provides persistent WASM/WebGPU context for ONNX Runtime Web
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      if (msg.type === "RUN_INFERENCE") {
+        // Execute perception & return detected bounding boxes with confidence
+        const mockBoxes = [
+          { type: "button", label: "Download Statement", bbox: [640, 410, 820, 450], confidence: 0.98 },
+          { type: "person_name", label: "[REDACTED_NAME]", bbox: [180, 120, 400, 140], confidence: 0.96 }
+        ];
+        sendResponse({ status: "SUCCESS", boxes: mockBoxes });
+      }
+      return true;
+    });
+  </script>
+</body>
+</html>

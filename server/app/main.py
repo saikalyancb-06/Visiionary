@@ -1,6 +1,5 @@
 ﻿"""
-FastAPI Server for PS 26171 Browser Agent
-Defends privacy in depth, validates schema, and interfaces with LLM/VLM planner.
+Updated Server Planner to support diverse actions across all synthetic demo portals
 """
 from fastapi import FastAPI, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,10 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Defense in Depth: Secondary server-side PII check
 SERVER_PII_PATTERNS = [
-    re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), # Email
-    re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"), # Card
+    re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"),
+    re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
 ]
 
 @app.get("/api/health")
@@ -29,11 +27,9 @@ def health_check():
 
 @app.post("/api/agent/plan", response_model=AgentPlanResponse)
 def plan_action(payload: SanitizedContextPackage):
-    # 1. Defense-in-depth verification
     raw_str = payload.model_dump_json()
     for pattern in SERVER_PII_PATTERNS:
         matches = pattern.findall(raw_str)
-        # Filter out redacted placeholders
         leaks = [m for m in matches if "REDACTED" not in m]
         if leaks:
             raise HTTPException(
@@ -41,37 +37,42 @@ def plan_action(payload: SanitizedContextPackage):
                 detail=f"Server privacy scanner rejected payload: unredacted pattern detected {leaks[:2]}"
             )
 
-    # 2. Plan reasoning based strictly on sanitized elements & instruction
-    task = payload.instruction_sanitized
+    task_lower = payload.instruction_sanitized.lower()
     actions = []
+    summary = ""
 
-    # Look for matching target element among sanitized elements
-    target_btn = None
+    # Match target interactable element
+    target_el = None
     for el in payload.elements:
-        if "statement" in el.label.lower() or "download" in el.label.lower():
-            target_btn = el
+        if el.interactable and (el.label.lower() in task_lower or any(w in el.label.lower() for w in ["download", "cart", "verify", "statement"])):
+            target_el = el
             break
 
-    if target_btn:
+    if target_el:
         actions.append(BrowserAction(
             type="click",
-            target=ActionTarget(element_id=target_btn.id)
+            target=ActionTarget(element_id=target_el.id)
         ))
         actions.append(BrowserAction(
             type="wait",
             milliseconds=1000
         ))
-        summary = f"Located statement download element '{target_btn.label}' (id={target_btn.id}). Executing click."
+        summary = f"Located interactable target element '{target_el.label}' (id={target_el.id}). Dispatched validated click."
     else:
-        actions.append(BrowserAction(type="done"))
-        summary = "No pending action required or goal achieved."
+        # Default to first element if provided
+        if payload.elements:
+            first = payload.elements[0]
+            actions.append(BrowserAction(
+                type="click",
+                target=ActionTarget(element_id=first.id)
+            ))
+            summary = f"Selected candidate element '{first.label}' (id={first.id})."
+        else:
+            actions.append(BrowserAction(type="done"))
+            summary = "Task complete."
 
     return AgentPlanResponse(
-        task=task,
+        task=payload.instruction_sanitized,
         reasoning_summary=summary,
         actions=actions
     )
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -1,0 +1,7 @@
+{
+  "model": "browser_agent_detector.onnx",
+  "box_max_diff": 2.9802322387695312e-08,
+  "logits_max_diff": 1.1175870895385742e-08,
+  "parity_status": "PASS",
+  "file_size_mb": 0.44276905059814453
+}

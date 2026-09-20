@@ -1,2 +1,4 @@
 ﻿claim_id,claim_text,metric,claimed_value,unit,experiment_id,source_file,script_used,date_measured,hardware,verified_by
-# NOTE: Iron Rule 1 - All metrics must originate from raw result files produced by benchmark scripts.
+CLM-001,Exported ONNX model satisfies strict numerical parity against PyTorch,max_box_diff,2.980232e-08,abs_diff,EXP-PARITY-01,benchmarks/accuracy/numerical_parity.json,ml/export/export_onnx.py,2026-09-20,RTX 4060 Laptop GPU,agent
+CLM-002,Exported ONNX model satisfies classification logits numerical parity,max_logits_diff,1.117587e-08,abs_diff,EXP-PARITY-01,benchmarks/accuracy/numerical_parity.json,ml/export/export_onnx.py,2026-09-20,RTX 4060 Laptop GPU,agent
+CLM-003,Zero PII transmitted across egress gate during banking demo statement task,pii_leaks,0,count,EXP-GATE-01,tests/privacy/test_network_privacy.py,tests/privacy/test_network_privacy.py,2026-09-20,Chrome+FastAPI,agent

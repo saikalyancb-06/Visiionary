@@ -6,11 +6,11 @@
 | Phase | Step | Status | Last Command Run | Artifacts | Next Action | Blockers |
 |---|---|---|---|---|---|---|
 | Phase 1 | Env Inspection | done | Out-File docs/environment_report.md | PROGRESS.md, docs/environment_report.md | - | None |
-| Phase 2 | Repo & Config | done | git tag phase-2-done | Monorepo structure, configs, docs | Proceed to Phase 3/6 walking skeleton & datasets | None |
-| Phase 3 | Dataset Research & Download | doing | Research public datasets | scripts/download/download_all.py | Formulate dataset manifests & fallbacks | None |
+| Phase 2 | Repo & Config | done | git tag phase-2-done | Monorepo structure, configs, docs | - | None |
+| Phase 3 | Dataset Research & Download | done | python scripts/download/download_all.py | data/manifests/*.json, docs/dataset_documentation.md | - | None |
 | Phase 4 | Preprocess & Splits | todo | - | - | Leakage-safe train/val/test splits | - |
-| Phase 5 | Synthetic PII Dataset | todo | - | - | Playwright generator | - |
-| Phase 6 | Walking Skeleton | todo | - | - | Thin slice E2E pipeline | - |
+| Phase 5 | Synthetic PII Dataset | doing | Building synthetic page generator | - | Generate template-split synthetic PII | None |
+| Phase 6 | Walking Skeleton | done | git tag walking-skeleton | tests/privacy/test_network_privacy.py, docs/walking_skeleton.md | Advance P1 Core: Synthetic PII generator & ML models | None |
 | Phase 7 | Model 1: UI Baseline | todo | - | - | Candidate benchmarks | - |
 | Phase 8 | Model 2: PII Baseline | todo | - | - | Candidate benchmarks + OCR | - |
 | Phase 9 | Training & Eval | todo | - | - | GPU AMP Training runs | - |
