@@ -1,0 +1,77 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Apex Bank - Online Banking Portal</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #1c1e21; }
+    .header { background: #0a2540; color: white; padding: 16px 24px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .card { background: white; border-radius: 8px; padding: 24px; margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px; }
+    .label { font-size: 12px; color: #65676b; text-transform: uppercase; font-weight: bold; margin-bottom: 4px; }
+    .value { font-size: 18px; font-weight: 600; color: #050505; }
+    .sensitive-field { background: #fff8e1; border-left: 4px solid #ffb300; padding: 8px 12px; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e4e6eb; }
+    th { color: #65676b; font-size: 13px; }
+    .btn { background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    .btn:hover { background: #0052a3; }
+    #download-status { margin-top: 10px; color: #008a00; font-weight: bold; display: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Apex Federal Banking</h2>
+    <div id="user-info">Logged in: <span id="account-holder" data-pii="person_name">Ananya Sharma</span></div>
+  </div>
+
+  <div class="card">
+    <h3>Account Overview</h3>
+    <div class="grid">
+      <div class="sensitive-field">
+        <div class="label">Account Number</div>
+        <div class="value" id="account-number" data-pii="bank_account">9823-4412-0091-8842</div>
+      </div>
+      <div class="sensitive-field">
+        <div class="label">Available Balance</div>
+        <div class="value" id="account-balance" data-pii="balance">INR 2,84,500.50</div>
+      </div>
+      <div class="sensitive-field">
+        <div class="label">Primary Email</div>
+        <div class="value" id="user-email" data-pii="email">ananya.sharma@example.in</div>
+      </div>
+      <div class="sensitive-field">
+        <div class="label">Linked Mobile</div>
+        <div class="value" id="user-phone" data-pii="phone">+91 98451 23091</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <h3>Recent Account Activity</h3>
+      <button id="btn-download-statement" class="btn" onclick="triggerDownload()">Download Statement</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>18 Sep 2026</td><td>Salary Credit - ISRO Tech</td><td>Credit</td><td>+ INR 1,25,000.00</td></tr>
+        <tr><td>16 Sep 2026</td><td>UPI Payment - Swiggy</td><td>Debit</td><td>- INR 450.00</td></tr>
+        <tr><td>14 Sep 2026</td><td>Amazon Retail</td><td>Debit</td><td>- INR 3,299.00</td></tr>
+      </tbody>
+    </table>
+    <div id="download-status">✓ Statement download started (apex_statement_sep2026.pdf)</div>
+  </div>
+
+  <script>
+    function triggerDownload() {
+      const status = document.getElementById("download-status");
+      status.style.display = "block";
+      status.setAttribute("data-downloaded", "true");
+      console.log("STATEMENT_DOWNLOADED_SUCCESSFULLY");
+    }
+  </script>
+</body>
+</html>

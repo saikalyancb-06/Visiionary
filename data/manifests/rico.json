@@ -1,0 +1,11 @@
+{
+  "dataset_id": "rico",
+  "name": "RICO",
+  "source_url": "https://interactionmining.org/rico",
+  "license": "CC-BY-4.0",
+  "purpose": "Supplementary UI element generalization across mobile/web",
+  "status": "supplementary",
+  "notes": "Supplementary UI layout evaluation",
+  "samples_count": 0,
+  "checksums": {}
+}

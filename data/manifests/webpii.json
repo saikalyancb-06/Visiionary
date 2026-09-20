@@ -1,0 +1,11 @@
+{
+  "dataset_id": "webpii",
+  "name": "WebPII",
+  "source_url": "Synthetic & Curated Web PII Corpus",
+  "license": "MIT / Synthetic",
+  "purpose": "Visual PII detection (names, emails, phones, credentials)",
+  "status": "active",
+  "notes": "Curated visual PII with exact bounding boxes",
+  "samples_count": 0,
+  "checksums": {}
+}

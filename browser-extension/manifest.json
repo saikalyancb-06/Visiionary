@@ -1,0 +1,26 @@
+﻿{
+  "manifest_version": 3,
+  "name": "PS26171 Privacy Browser Agent",
+  "version": "1.0.0",
+  "description": "On-device Visual Perception for Light-weight Browser Agents (ISRO PS 26171)",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:*/*",
+    "http://localhost:*/*"
+  ],
+  "background": {
+    "service_worker": "src/background/background.js"
+  },
+  "action": {
+    "default_popup": "src/ui/popup.html",
+    "default_title": "PS26171 Agent"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  }
+}

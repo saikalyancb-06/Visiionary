@@ -1,0 +1,11 @@
+{
+  "dataset_id": "webui",
+  "name": "WebUI",
+  "source_url": "https://github.com/divyanshushekhar/WebUI",
+  "license": "CC-BY-4.0",
+  "purpose": "Browser UI element detection (buttons, inputs, links, text)",
+  "status": "documented_subset",
+  "notes": "Large dataset; curated subset used for on-device browser agent training",
+  "samples_count": 0,
+  "checksums": {}
+}
