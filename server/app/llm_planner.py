@@ -93,20 +93,24 @@ def check_ollama_status() -> dict:
     return {"available": False, "model": None, "is_vision": False, "active_models": []}
 
 def build_llm_prompt(payload: SanitizedContextPackage) -> str:
-    # Summarize page elements concisely for LLM context
+    # Summarize page elements concisely for LLM context, including safe observed hrefs
     elements_summary = []
     for el in payload.elements[:35]:
         if el.interactable and el.sensitivity != "sensitive_raw":
-            elements_summary.append({
+            item = {
                 "id": el.id,
                 "role": el.role,
                 "label": el.label[:60],
                 "bbox": el.bbox
-            })
+            }
+            if el.href:
+                item["href"] = el.href
+            elements_summary.append(item)
 
     history_summary = []
     for h in (payload.history or []):
-        history_summary.append(f"Step {h.get('step')}: {h.get('action')} -> {h.get('result')}")
+        state_note = " (State transition: YES)" if h.get('state_changed') else (" (State transition: NO)" if 'state_changed' in h else "")
+        history_summary.append(f"Step {h.get('step')}: {h.get('action')} -> {h.get('message') or h.get('result')}{state_note}")
 
     redactions_count = len(payload.redactions) if payload.redactions else 0
 
@@ -117,7 +121,18 @@ def build_llm_prompt(payload: SanitizedContextPackage) -> str:
         if headings:
             screen_context_line = f"\n- Key Page Headings: {', '.join(headings[:3])}"
 
-    prompt = f"""USER TASK: {payload.instruction_sanitized}
+    # Verifier state feedback
+    v_info = ""
+    if payload.verification_state:
+        vs = payload.verification_state
+        v_info = f"""
+VERIFICATION FEEDBACK:
+- Goal Status: {vs.get('goal_status')}
+- Current Subgoal / Remaining: {vs.get('remaining_goal')}
+- Completed Subgoals: {vs.get('completed_subgoals')}
+- Next Hint: {vs.get('next_hint')}"""
+
+    prompt = f"""USER FULL GOAL: {payload.instruction_sanitized}{v_info}
 CURRENT PAGE:
 - URL: {payload.page.url_sanitized}
 - Title: {payload.page.title_sanitized}{screen_context_line}
@@ -212,6 +227,14 @@ def plan_with_local_llm(payload: SanitizedContextPackage) -> Tuple[List[BrowserA
             if not nav_url.startswith("http"):
                 nav_url = f"https://{nav_url}"
             actions.append(BrowserAction(type="navigate", url=nav_url))
+        elif action_type in ("open_link", "openlink"):
+            target_id = action_dict.get("target")
+            link_url = action_dict.get("url")
+            actions.append(BrowserAction(
+                type="open_link",
+                target=ActionTarget(element_id=target_id) if target_id else None,
+                url=link_url
+            ))
         elif action_type == "search":
             target_id = action_dict.get("target")
             query_text = action_dict.get("text") or action_dict.get("query") or ""

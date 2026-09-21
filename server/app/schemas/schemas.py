@@ -16,6 +16,7 @@ class ElementMetadata(BaseModel):
     sensitivity: str = "safe"
     source: str = "dom+vision"
     confidence: float = 1.0
+    href: Optional[str] = None
 
 class RedactionMetadata(BaseModel):
     id: str
@@ -48,6 +49,7 @@ class SanitizedContextPackage(BaseModel):
     privacy_report: PrivacyReport
     metrics: Optional[Dict[str, Any]] = None
     history: List[Dict[str, Any]] = Field(default_factory=list)
+    verification_state: Optional[Dict[str, Any]] = None
 
 class ActionTarget(BaseModel):
     element_id: Optional[str] = None

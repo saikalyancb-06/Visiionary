@@ -469,6 +469,17 @@ function extractDOMContext(documentObj) {
       }
     }
 
+    // Extract safe navigation href for anchors without exposing raw secrets/tokens
+    let safeHref = null;
+    const anchorEl = el.closest('a[href]');
+    if (anchorEl && anchorEl.href) {
+      const rawHref = anchorEl.href.trim();
+      if (rawHref.startsWith('http://') || rawHref.startsWith('https://')) {
+        // Sanitize any PII in URL parameters
+        safeHref = sanitizeTextForPII(rawHref);
+      }
+    }
+
     elements.push({
       id: elementId,
       role: el.tagName.toLowerCase(),
@@ -482,7 +493,8 @@ function extractDOMContext(documentObj) {
       interactable: true,
       sensitivity: isSensitive ? 'redacted' : 'safe',
       source: 'dom+vision',
-      confidence: 1.0
+      confidence: 1.0,
+      href: safeHref
     });
   });
 
@@ -556,12 +568,66 @@ async function executeAction(action) {
         throw new Error(`Click target element not found: ${JSON.stringify(action.target)}`);
       }
 
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.focus();
-      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-      el.click();
-      return { success: true, message: `Clicked element: ${el.id || el.tagName}` };
+      // Requirement 3: Resolve Clickable Ancestors
+      // If the matched element is not itself an interactive tag (e.g. <h3> inside <a href="...">),
+      // resolve the nearest clickable ancestor like a[href], button, [role="link"], [role="button"]
+      const isClickableTag = (node) => {
+        if (!node || !node.tagName) return false;
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'a' && node.hasAttribute('href')) return true;
+        if (tag === 'button') return true;
+        const role = (node.getAttribute('role') || '').toLowerCase();
+        if (role === 'button' || role === 'link' || role === 'tab') return true;
+        if (node.hasAttribute('onclick')) return true;
+        return false;
+      };
+
+      let targetToClick = el;
+      if (!isClickableTag(el)) {
+        const clickableAncestor = el.closest('a[href], button, [role="button"], [role="link"], [role="tab"], [onclick]');
+        if (clickableAncestor) {
+          targetToClick = clickableAncestor;
+        }
+      }
+
+      targetToClick.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetToClick.focus();
+      targetToClick.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+      targetToClick.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+      targetToClick.click();
+
+      // If the target is an anchor with an href, ensure navigation triggers if click didn't navigate
+      const href = targetToClick.tagName === 'A' ? targetToClick.href : (targetToClick.closest('a[href]')?.href);
+
+      return {
+        success: true,
+        action_executed: true,
+        target_found: true,
+        clicked_id: targetToClick.id || el.id || '',
+        clicked_tag: targetToClick.tagName,
+        observed_href: href || null,
+        message: `Clicked element: ${targetToClick.id || targetToClick.tagName} (resolved from ${el.tagName})`
+      };
+    }
+
+    case 'open_link': {
+      let el = findTargetElement(action.target);
+      const targetHref = action.url || (el && (el.href || el.closest('a[href]')?.href));
+      if (targetHref && (targetHref.startsWith('http://') || targetHref.startsWith('https://'))) {
+        window.location.href = targetHref;
+        return {
+          success: true,
+          action_executed: true,
+          target_found: true,
+          message: `Opened observed link: ${targetHref}`
+        };
+      }
+      // Fallback to click if no href
+      if (el) {
+        el.click();
+        return { success: true, action_executed: true, target_found: true, message: `Dispatched click for open_link on ${el.id || el.tagName}` };
+      }
+      return { success: false, action_executed: false, target_found: false, error: 'No target or valid URL for open_link' };
     }
 
     case 'type': {

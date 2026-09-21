@@ -245,6 +245,49 @@ step3_ok = r_g_step3.achieved and r_g_step3.goal_status == "GOAL_ACHIEVED"
 
 agent_results.append(("TEST G: Multi-Step Goal Semantics - Google Search never completes product goal", step1_ok and step2_ok and step3_ok))
 
+# TEST H: Flipkart Multi-Step Autonomous Navigation with Observed Href
+task_h = "open flipkart and find the best selling black shirt"
+
+# Step 1: Navigates to search engine
+payload_h1 = make_base_payload(
+    instruction_sanitized=task_h,
+    page=PageContext(url_sanitized="about:blank", title_sanitized="New Tab", viewport={"w": 1280, "h": 720}),
+    elements=[]
+)
+actions_h1, _ = decide_next_action(payload_h1)
+h1_ok = actions_h1[0].type == "navigate" and "google.com/search?q=flipkart" in actions_h1[0].url
+
+# Step 2: On Google search results, inspects observed link with href and dispatches open_link
+payload_h2 = make_base_payload(
+    instruction_sanitized=task_h,
+    page=PageContext(url_sanitized="https://www.google.com/search?q=flipkart", title_sanitized="flipkart - Google Search", viewport={"w": 1280, "h": 720}),
+    elements=[
+        ElementMetadata(id="link-fk", role="a", label="Flipkart - Online Shopping Site", bbox=[0, 100, 300, 20], href="https://www.flipkart.com/"),
+        ElementMetadata(id="link-other", role="a", label="News for flipkart", bbox=[0, 150, 200, 20], href="https://news.google.com")
+    ],
+    history=[{"action": "navigate", "url": "https://www.google.com/search?q=flipkart", "result": "ok"}]
+)
+actions_h2, _ = decide_next_action(payload_h2)
+h2_ok = actions_h2[0].type == "open_link" and actions_h2[0].url == "https://www.flipkart.com/"
+
+# Step 3: Arrived on Flipkart, extracts search terms correctly ("black shirt", NOT "flipkart website")
+payload_h3 = make_base_payload(
+    instruction_sanitized="open flipkart website and find the best selling black shirt inside that website",
+    page=PageContext(url_sanitized="https://www.flipkart.com/", title_sanitized="Online Shopping Site for Mobiles, Electronics, Furniture, Grocery, Lifestyle, Books & More. Best Offers!", viewport={"w": 1280, "h": 720}),
+    elements=[
+        ElementMetadata(id="search-inp", role="input", label="Search for Products, Brands and More", bbox=[100, 20, 500, 30])
+    ],
+    history=[
+        {"action": "navigate", "result": "ok"},
+        {"action": "open_link", "url": "https://www.flipkart.com/", "result": "ok"}
+    ]
+)
+actions_h3, _ = decide_next_action(payload_h3)
+h3_ok = actions_h3[0].type == "type" and actions_h3[0].value.text == "black shirt"
+
+agent_results.append(("TEST H: Flipkart - Autonomous navigation via observed href & query extraction", h1_ok and h2_ok and h3_ok))
+
+
 
 # Print Agent Results
 agent_passed = 0

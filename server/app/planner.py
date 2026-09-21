@@ -93,10 +93,11 @@ def extract_search_terms(task: str) -> List[str]:
     m = re.search(r'(?:search for|find|search|look for|query)\s+["\']?([^"\']+)["\']?', task, re.IGNORECASE)
     if m:
         query = m.group(1).strip()
-        # strip trailing directives like "and open it", "and add to cart"
+        # strip trailing directives like "and open it", "and add to cart", "inside that website"
+        query = re.sub(r'\s+(?:inside|in|on)\s+(?:that|the|this)?\s*(?:website|portal|page|site|store|app).*$', '', query, flags=re.IGNORECASE)
         query = re.sub(r'\s+(?:and\s+.*|on\s+.*)$', '', query, flags=re.IGNORECASE)
         # strip leading superlatives if user said "find the best seller black shirt" -> "black shirt"
-        query_cleaned = re.sub(r'\b(the\s+)?best\s*seller\s*', '', query, flags=re.IGNORECASE).strip()
+        query_cleaned = re.sub(r'\b(the\s+)?best\s*sell(?:er|ing)\s*', '', query, flags=re.IGNORECASE).strip()
         return [query_cleaned or query]
     return []
 
@@ -134,14 +135,17 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
 
     # 0. Universal Navigation Intent: "open X", "go to X", "navigate to X"
     nav_match = re.search(r'(?:open|go to|navigate to|visit)\s+([a-zA-Z0-9\s._-]+)', task_lower)
-    has_navigated = any(h == "navigate" for h in history_actions)
-    if nav_match and not has_navigated:
+    clean_name = ""
+    target_name = ""
+    if nav_match:
         raw_query = nav_match.group(1).strip()
         # Clean query: strip words like "portal", "website", "the", "and search...", etc.
         clean_name = re.sub(r'^(the|a|an)\s+', '', raw_query, flags=re.IGNORECASE).strip()
         clean_name = re.sub(r'\s+(and|then|to|for)\s+.*$', '', clean_name, flags=re.IGNORECASE).strip()
         target_name = re.sub(r'\b(portal|website|page|site|webpage|online)\b', '', clean_name, flags=re.IGNORECASE).strip()
 
+    has_navigated = any(h == "navigate" for h in history_actions)
+    if nav_match and not has_navigated:
         target_url = None
         if target_name.startswith("http://") or target_name.startswith("https://"):
             target_url = target_name
@@ -165,12 +169,26 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
         result_links = [
             el for el in elements 
             if el.role in ("a", "link") 
-            and len(el.label.strip()) > 4 
+            and len(el.label.strip()) > 3 
             and normalize(el.label) not in skip_labels
+            and not any(normalize(el.label).startswith(p) for p in ("images for", "videos for", "news for", "shopping for"))
             and not any(x in normalize(el.label) for x in ("verbatim", "any time", "past hour", "clear"))
         ]
         if result_links:
-            best_link = result_links[0]
+            # Check if there is a result matching the target destination
+            target_match_links = []
+            if clean_name:
+                dest_term = clean_name.lower().split()[0]
+                target_match_links = [el for el in result_links if dest_term in el.label.lower() or (el.href and dest_term in el.href.lower())]
+            best_link = target_match_links[0] if target_match_links else result_links[0]
+
+            # Requirement 5: Use observed href / OPEN_LINK if available
+            if best_link.href and (best_link.href.startswith("http://") or best_link.href.startswith("https://")):
+                return [
+                    BrowserAction(type="open_link", target=ActionTarget(element_id=best_link.id), url=best_link.href),
+                    BrowserAction(type="wait", milliseconds=500)
+                ], f"Autonomously navigating via observed link '{best_link.label}' -> {best_link.href}."
+
             return [
                 BrowserAction(type="click", target=ActionTarget(element_id=best_link.id)),
                 BrowserAction(type="wait", milliseconds=500)

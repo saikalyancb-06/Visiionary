@@ -312,7 +312,7 @@ async function captureAndSanitizeTab(tabId, windowId, taskInstruction, stepNumbe
 // ---------------------------------------------------------------------------
 // Navigation-safe action executor with 12 generalized action dispatches
 // ---------------------------------------------------------------------------
-const NAVIGATION_TRIGGERING_ACTIONS = new Set(['click', 'navigate', 'keypress', 'search', 'go_back', 'go_forward', 'download']);
+const NAVIGATION_TRIGGERING_ACTIONS = new Set(['click', 'open_link', 'navigate', 'keypress', 'search', 'go_back', 'go_forward', 'download']);
 
 async function executeAction(tabId, act, navTracker) {
   let actRes = null;
@@ -321,9 +321,17 @@ async function executeAction(tabId, act, navTracker) {
     try {
       console.log(`[VISIIONARY] Direct tab navigation on Tab #${tabId} to: ${act.url}`);
       await chrome.tabs.update(tabId, { url: act.url });
-      actRes = { success: true, result: { message: `Navigated to ${act.url}` } };
+      actRes = { success: true, result: { message: `Navigated to ${act.url}`, action_executed: true } };
     } catch (navErr) {
       console.warn('[VISIIONARY] Direct navigation error:', navErr);
+    }
+  } else if (act.type === 'open_link' && act.url) {
+    try {
+      console.log(`[VISIIONARY] Direct open_link on Tab #${tabId} to observed href: ${act.url}`);
+      await chrome.tabs.update(tabId, { url: act.url });
+      actRes = { success: true, result: { message: `Opened observed link: ${act.url}`, action_executed: true } };
+    } catch (navErr) {
+      console.warn('[VISIIONARY] Direct open_link error:', navErr);
     }
   } else if (act.type === 'go_back') {
     try {
@@ -479,10 +487,13 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
   const startTime = Date.now();
 
   try {
+    let lastActionKey = null;
+    let consecutiveSameActionCount = 0;
+
     while (agentState.isRunning && agentState.step <= agentState.maxSteps) {
       broadcastStateUpdate(`[LOOP] Step ${agentState.step}/${agentState.maxSteps}: Observing Tab #${targetTabId}...`, 'info');
 
-      // 1. OBSERVE & SANITIZE
+      // 1. OBSERVE & SANITIZE (Current state before planning)
       agentState.status = 'OBSERVING';
       const sanitizedPayload = await captureAndSanitizeTab(
         targetTabId, targetWindowId, taskInstruction, agentState.step, agentState.history
@@ -495,6 +506,16 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
       }
       agentState.currentUrl = sanitizedPayload.page?.url_sanitized || agentState.currentUrl;
 
+      // Provide Planner with Verifier Feedback & Explicit Goal State (Requirement 7 & 8)
+      sanitizedPayload.verification_state = {
+        goal_status: agentState.verificationState?.goal_status || 'GOAL_NOT_YET_ACHIEVED',
+        remaining_goal: agentState.remainingGoal || taskInstruction,
+        completed_subgoals: agentState.completedSubgoals || [],
+        subgoals: agentState.subgoals || [],
+        next_hint: agentState.verificationState?.next_hint || null,
+        last_action_result: agentState.history.length > 0 ? agentState.history[agentState.history.length - 1] : null
+      };
+
       // Check for Loop / Stuck State Signature
       const pageSignature = `${agentState.currentUrl}_${sanitizedPayload.elements.length}`;
       agentState.loopProtection.signatures.push(pageSignature);
@@ -502,7 +523,7 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
       if (recentSigs.length === 3 && recentSigs[0] === recentSigs[1] && recentSigs[1] === recentSigs[2]) {
         agentState.loopProtection.loopDetected = true;
         broadcastStateUpdate('[LOOP SHIELD] Repetitive page state detected. Triggering recovery hint...', 'warn');
-        sanitizedPayload.instruction_sanitized += ' (Note: Loop shield detected no state change. Try a different element, search query, or navigate directly).';
+        sanitizedPayload.instruction_sanitized += ' (Note: Loop shield detected no state change. Try an alternative link/element, open_link via observed href, or navigate directly).';
       }
 
       // 2. PLAN VIA EGRESS GATE
@@ -523,9 +544,33 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
         break;
       }
 
+      // Check for repeated identical action (Requirement 6: Loop Shield Must Change Strategy)
+      const firstAction = plan.actions[0];
+      const currentActionKey = `${firstAction.type}_${firstAction.target?.element_id || firstAction.url || ''}`;
+      if (currentActionKey === lastActionKey) {
+        consecutiveSameActionCount++;
+      } else {
+        lastActionKey = currentActionKey;
+        consecutiveSameActionCount = 1;
+      }
+
+      if (consecutiveSameActionCount >= 2 && firstAction.type === 'click') {
+        broadcastStateUpdate(`[LOOP SHIELD] Repeated click with no state change detected. Forcing recovery strategy (open_link / alternative navigation)...`, 'warn');
+        // Find if target element has an observed href or find an alternative link
+        const targetEl = sanitizedPayload.elements.find(e => e.id === firstAction.target?.element_id);
+        if (targetEl && targetEl.href) {
+          firstAction.type = 'open_link';
+          firstAction.url = targetEl.href;
+          broadcastStateUpdate(`[LOOP SHIELD] Converted repeated click into open_link: ${targetEl.href}`);
+        }
+      }
+
       // 3. ACT: Execute planned actions
       agentState.status = 'EXECUTING';
       let plannerSignaledDone = false;
+      const preActionUrl = agentState.currentUrl;
+      const preActionTitle = sanitizedPayload.page?.title_sanitized || '';
+      const preActionSignature = pageSignature;
 
       for (const act of plan.actions) {
         if (!agentState.isRunning) break;
@@ -536,31 +581,56 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
           continue;
         }
 
-        agentState.currentAction = `${act.type}: ${act.target || act.text || act.url || ''}`;
+        agentState.currentAction = `${act.type}: ${act.url || (typeof act.target === 'string' ? act.target : (act.target?.element_id || '')) || act.text || ''}`;
         broadcastStateUpdate(`[ACT] ${agentState.currentAction}`);
 
         const actRes = await executeAction(targetTabId, act, navTracker);
 
+        // State transition detection will be evaluated during re-observe
         agentState.history.push({
           step: agentState.step,
           action: act.type,
-          target: act.target || '',
-          result: actRes?.result?.message || 'ok'
+          target: act.target || act.url || '',
+          action_executed: actRes?.result?.action_executed ?? actRes?.success ?? true,
+          message: actRes?.result?.message || 'ok'
         });
       }
 
-      // 4. RE-OBSERVE & VERIFY
+      // Wait for state stability
+      await new Promise(r => setTimeout(r, 600));
+
+      // 4. TRUE RE-OBSERVE BEFORE VERIFICATION (Requirement 1)
+      agentState.status = 'OBSERVING';
+      const postActionPayload = await captureAndSanitizeTab(
+        targetTabId, targetWindowId, taskInstruction, agentState.step, agentState.history
+      );
+
+      // Update active URL and state from NEW observation
+      const postActionUrl = postActionPayload.page?.url_sanitized || agentState.currentUrl;
+      const postActionTitle = postActionPayload.page?.title_sanitized || '';
+      const postActionSignature = `${postActionUrl}_${postActionPayload.elements.length}`;
+      agentState.currentUrl = postActionUrl;
+
+      // Requirement 2: Evaluate State Transition
+      const stateChanged = (preActionUrl !== postActionUrl) || (preActionTitle !== postActionTitle) || (preActionSignature !== postActionSignature);
+      if (agentState.history.length > 0) {
+        const lastHist = agentState.history[agentState.history.length - 1];
+        lastHist.state_changed = stateChanged;
+        lastHist.url_after = postActionUrl;
+      }
+
+      // 5. VERIFY USING THE NEW POST-ACTION OBSERVATION (Requirement 1)
       agentState.status = 'VERIFYING';
       agentState.currentAction = 'Verifying task completion...';
-      broadcastStateUpdate('[VERIFY] Checking goal satisfaction with independent verifier...');
+      broadcastStateUpdate('[VERIFY] Checking goal satisfaction with independent verifier on NEW state...');
 
       const recentDownloads = await getRecentDownloads();
       const verification = await verifyWithServer(
         taskInstruction,
-        agentState.currentUrl,
-        sanitizedPayload.page?.title_sanitized || '',
-        sanitizedPayload.page?.screen_summary || {},
-        sanitizedPayload.elements,
+        postActionUrl,
+        postActionTitle,
+        postActionPayload.page?.screen_summary || {},
+        postActionPayload.elements,
         recentDownloads,
         agentState.history
       );
@@ -592,7 +662,8 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
         if (plannerSignaledDone) {
           broadcastStateUpdate(`[VERIFIER REJECTION] Planner claimed done but verifier declined: ${verification.reason}. Remaining: "${agentState.remainingGoal}". Continuing loop...`, 'warn');
         } else {
-          broadcastStateUpdate(`[ACTION SUCCESS -> GOAL NOT YET ACHIEVED] ${verification.reason} | Remaining: "${agentState.remainingGoal}"`);
+          const stateNote = stateChanged ? 'Page state updated' : 'No state transition detected';
+          broadcastStateUpdate(`[ACTION SUCCESS -> GOAL NOT YET ACHIEVED] ${stateNote}. ${verification.reason} | Remaining: "${agentState.remainingGoal}"`);
         }
       }
 
