@@ -3,43 +3,56 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { width: 340px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 16px; background: #fafbfc; color: #24292e; }
-    h3 { margin-top: 0; margin-bottom: 8px; color: #0a2540; font-size: 16px; display: flex; align-items: center; justify-content: space-between; }
-    .status-badge { font-size: 11px; background: #def7ec; color: #03543f; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
-    .card { background: white; border: 1px solid #e1e4e8; border-radius: 6px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-    .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
-    .stat-label { color: #586069; }
-    .stat-value { font-weight: 600; }
-    .input-box { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; margin-bottom: 8px; font-size: 13px; }
-    .btn { width: 100%; background: #0066cc; color: white; border: none; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; }
-    .btn:hover { background: #0052a3; }
-    .btn-danger { background: #d73a49; margin-top: 6px; }
-    .btn-danger:hover { background: #cb2431; }
-    .log-box { font-family: monospace; font-size: 11px; background: #24292e; color: #f6f8fa; padding: 8px; border-radius: 4px; height: 100px; overflow-y: auto; }
+    body { width: 380px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 14px; background: #0f172a; color: #f8fafc; }
+    h3 { margin: 0 0 10px 0; color: #38bdf8; font-size: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .badge { font-size: 11px; background: #064e3b; color: #34d399; padding: 2px 8px; border-radius: 12px; font-weight: bold; border: 1px solid #059669; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; margin-bottom: 4px; }
+    .stat-label { color: #94a3b8; }
+    .stat-val { font-weight: bold; color: #38bdf8; }
+    .stat-zero { font-weight: bold; color: #34d399; }
+    .input-box { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; border-radius: 6px; font-size: 13px; margin-bottom: 8px; }
+    .input-box:focus { outline: none; border-color: #38bdf8; }
+    .btn { width: 100%; background: #0284c7; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
+    .btn:hover { background: #0369a1; }
+    .btn-danger { background: #dc2626; margin-top: 6px; padding: 7px; font-size: 11px; }
+    .btn-danger:hover { background: #b91c1c; }
+    .debug-box { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; background: #020617; border: 1px solid #334155; color: #cbd5e1; padding: 8px; border-radius: 6px; height: 130px; overflow-y: auto; line-height: 1.4; }
+    .step-log { margin-bottom: 4px; }
+    .text-success { color: #34d399; }
+    .text-alert { color: #f87171; }
+    .text-info { color: #38bdf8; }
   </style>
 </head>
 <body>
-  <h3>PS26171 Privacy Agent <span class="status-badge" id="shield-status">PROTECTED</span></h3>
+  <h3>Visiionary Browser Agent <span class="badge" id="shield-status">PROTECTED (LOCAL)</span></h3>
   
   <div class="card">
-    <div class="stat-row"><span class="stat-label">Local Perception:</span><span class="stat-value" style="color:#008a00;">ACTIVE (ONNX)</span></div>
-    <div class="stat-row"><span class="stat-label">PII Detector:</span><span class="stat-value" style="color:#008a00;">MULTI-LAYER</span></div>
-    <div class="stat-row"><span class="stat-label">Redaction Engine:</span><span class="stat-value">SOLID OPAQUE</span></div>
-    <div class="stat-row"><span class="stat-label">Egress Gate:</span><span class="stat-value" style="color:#008a00;">ZERO LEAK</span></div>
+    <div class="stat-grid">
+      <div><span class="stat-label">Local Perception:</span> <span class="stat-val">ONNX WebGPU/WASM</span></div>
+      <div><span class="stat-label">Network Destination:</span> <span class="stat-val">127.0.0.1 (Local)</span></div>
+      <div><span class="stat-label">External Network:</span> <span class="stat-zero">NONE (0 Bytes)</span></div>
+      <div><span class="stat-label">PII Transmitted:</span> <span class="stat-zero" id="stat-pii-leaks">0 (ZERO)</span></div>
+      <div><span class="stat-label">Secrets Transmitted:</span> <span class="stat-zero" id="stat-secret-leaks">0 (ZERO)</span></div>
+      <div><span class="stat-label">Redacted Regions:</span> <span class="stat-val" id="stat-redacted-count">Active</span></div>
+    </div>
   </div>
 
   <div class="card">
-    <input type="text" id="task-input" class="input-box" value="Download my latest statement" placeholder="Enter task instruction..." />
-    <button id="btn-run" class="btn">Execute Privacy-Preserved Task</button>
-    <button id="btn-stop" class="btn btn-danger">Kill Switch (Stop Agent)</button>
+    <input type="text" id="task-input" class="input-box" value="Download my latest bank statement." placeholder="Enter natural-language instruction..." />
+    <button id="btn-run" class="btn">▶ Run Agent (Local Closed-Loop)</button>
+    <button id="btn-stop" class="btn btn-danger">⏹ Kill Switch (Stop)</button>
   </div>
 
   <div class="card">
-    <div style="font-size: 12px; font-weight: bold; margin-bottom: 4px;">Local Audit Log (Metadata Only)</div>
-    <div id="log-box" class="log-box">
-      [00:01] Engine initialized.<br>
-      [00:02] Privacy policy loaded.<br>
-      [00:03] Egress gate choke point active.
+    <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #94a3b8; display: flex; justify-content: space-between;">
+      <span>Autonomous Agent Debug Panel</span>
+      <span id="agent-state-badge" style="color:#38bdf8;">IDLE</span>
+    </div>
+    <div id="log-box" class="debug-box">
+      <div class="step-log">[READY] Visiionary Local Agent initialized.</div>
+      <div class="step-log">[READY] Egress gate choke point active on 127.0.0.1.</div>
+      <div class="step-log">[READY] Local credential vault loaded.</div>
     </div>
   </div>
 

@@ -1,5 +1,5 @@
 ﻿/**
- * Real Screen and DOM Perception Pipeline (Phases 4 & 5)
+ * Real Screen and DOM Perception Pipeline
  * Captures visible tab screenshot, extracts interactive DOM elements,
  * detects sensitive PII via regex and DOM rules, and runs visual model inference.
  */
@@ -7,14 +7,13 @@
 import { detectSensitiveDOM, scanTextForPII, fuseRegions } from '../privacy/detector.js';
 
 /**
- * Extracts interactable and informative elements from document DOM.
- * Redacts any text content belonging to sensitive fields so raw PII never leaks.
+ * Extracts interactable and informative elements from real webpages.
+ * Supports any standard HTML5 or modern Single Page App (React, Angular, Vue, Tailwind).
  */
 export function extractDOMContext(documentObj) {
   const elements = [];
   const redactions = [];
   const sensitiveDOM = detectSensitiveDOM(documentObj);
-  const sensitiveSet = new Set();
 
   sensitiveDOM.forEach(r => {
     redactions.push({
@@ -25,28 +24,58 @@ export function extractDOMContext(documentObj) {
     });
   });
 
-  // Extract all interactive elements (buttons, inputs, links, selects)
-  const interactiveSelectors = 'button, input, select, textarea, a, [role="button"], [onclick]';
+  // Select all standard interactive and semantic elements across real websites
+  const interactiveSelectors = 'button, input, select, textarea, a[href], [role="button"], [role="link"], [role="searchbox"], [role="combobox"], [onclick], [tabindex="0"]';
   const nodes = documentObj.querySelectorAll(interactiveSelectors);
 
-  nodes.forEach((el, idx) => {
-    const rect = el.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+  const seen = new Set();
 
-    // Check if this element is marked sensitive
+  nodes.forEach((el, idx) => {
+    if (seen.has(el)) return;
+    seen.add(el);
+
+    const rect = el.getBoundingClientRect();
+    // Filter out invisible, hidden, or zero-sized elements
+    if (rect.width <= 2 || rect.height <= 2) return;
+    const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+    if (style && (style.visibility === 'hidden' || style.display === 'none' || parseFloat(style.opacity) === 0)) {
+      return;
+    }
+
+    // Check if element is sensitive
     const isSensitive = el.type === 'password' || 
                         el.hasAttribute('data-pii') || 
                         (el.id && (el.id.includes('pass') || el.id.includes('account') || el.id.includes('balance') || el.id.includes('otp')));
 
-    let label = el.innerText || el.value || el.placeholder || el.getAttribute('aria-label') || el.id || `element_${idx}`;
+    // Extract best informative label for planner reasoning
+    let rawLabel = el.innerText || 
+                   el.value || 
+                   el.placeholder || 
+                   el.getAttribute('aria-label') || 
+                   el.getAttribute('title') || 
+                   el.name || 
+                   el.id || 
+                   `element_${idx}`;
+
+    rawLabel = rawLabel.replace(/\s+/g, ' ').trim();
     if (isSensitive) {
-      label = `[REDACTED_${(el.getAttribute('data-pii') || el.type || 'SENSITIVE').toUpperCase()}]`;
+      rawLabel = `[REDACTED_${(el.getAttribute('data-pii') || el.type || 'SENSITIVE').toUpperCase()}]`;
+    }
+
+    // Generate stable element ID if not present
+    let elementId = el.id;
+    if (!elementId) {
+      elementId = el.name ? `name_${el.name}` : `visi_el_${idx}`;
+      // Attach to element dataset for fast reverse-lookup
+      if (el.setAttribute) {
+        el.setAttribute('id', elementId);
+      }
     }
 
     elements.push({
-      id: el.id || `el_${idx}`,
+      id: elementId,
       role: el.tagName.toLowerCase(),
-      label: label.trim(),
+      label: rawLabel,
       bbox: [
         Math.max(0, Math.round(rect.left)),
         Math.max(0, Math.round(rect.top)),
