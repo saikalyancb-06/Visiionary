@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Visiionary Agent Side Panel</title>
+  <style>
+    body { width: 100%; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 14px; background: #0b1120; color: #f8fafc; overflow-x: hidden; }
+    h3 { margin: 0 0 10px 0; color: #38bdf8; font-size: 15px; display: flex; align-items: center; justify-content: space-between; }
+    .badge { font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); }
+    .badge-success { background: #064e3b; color: #34d399; border-color: #059669; }
+    .badge-running { background: #0c4a6e; color: #38bdf8; border-color: #0284c7; }
+    .badge-alert { background: #7f1d1d; color: #f87171; border-color: #dc2626; }
+    .badge-idle { background: #334155; color: #cbd5e1; border-color: #64748b; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; margin-bottom: 4px; }
+    .stat-label { color: #94a3b8; }
+    .stat-val { font-weight: bold; color: #38bdf8; word-break: break-all; }
+    .stat-zero { font-weight: bold; color: #34d399; }
+    .status-banner { padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; background: #0f172a; border: 1px solid #334155; }
+    .input-box { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; border-radius: 6px; font-size: 13px; margin-bottom: 8px; }
+    .input-box:focus { outline: none; border-color: #38bdf8; }
+    .btn { width: 100%; background: #0284c7; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; transition: background 0.15s; }
+    .btn:hover { background: #0369a1; }
+    .btn-danger { background: #dc2626; margin-top: 6px; padding: 7px; font-size: 11px; }
+    .btn-danger:hover { background: #b91c1c; }
+    .debug-box { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; background: #020617; border: 1px solid #334155; color: #cbd5e1; padding: 8px; border-radius: 6px; height: 160px; overflow-y: auto; line-height: 1.45; }
+    .step-log { margin-bottom: 4px; word-break: break-word; }
+    .text-success { color: #34d399; }
+    .text-alert { color: #f87171; }
+    .text-info { color: #38bdf8; }
+    .text-warn { color: #fbbf24; }
+  </style>
+</head>
+<body>
+  <h3>
+    <span>Visiionary Browser Agent</span>
+    <span class="badge badge-idle" id="agent-state-badge">IDLE</span>
+  </h3>
+
+  <!-- Current Task & Run Status Card -->
+  <div class="card">
+    <div class="status-banner">
+      <span>Status: <strong id="lbl-status">Ready</strong></span>
+      <span id="lbl-step-count" style="color: #38bdf8;">Step 0</span>
+    </div>
+
+    <div class="stat-grid">
+      <div><span class="stat-label">Target Tab:</span> <span class="stat-val" id="val-target-tab">--</span></div>
+      <div><span class="stat-label">Current Action:</span> <span class="stat-val" id="val-current-action">--</span></div>
+      <div style="grid-column: span 2;"><span class="stat-label">Active URL:</span> <span class="stat-val" id="val-current-url" style="font-size:10px;">--</span></div>
+      <div style="grid-column: span 2;"><span class="stat-label">Goal Verification:</span> <span class="stat-val" id="val-verifier-state" style="color:#fbbf24;">GOAL_NOT_YET_ACHIEVED</span></div>
+      <div style="grid-column: span 2;"><span class="stat-label">Remaining Goal:</span> <span class="stat-val" id="val-remaining-goal" style="color:#38bdf8; font-size:10px;">--</span></div>
+      <div style="grid-column: span 2;"><span class="stat-label">Subgoals:</span> <span class="stat-val" id="val-subgoals-summary" style="font-size:10px; color:#cbd5e1;">--</span></div>
+    </div>
+  </div>
+
+  <!-- User Input Form -->
+  <div class="card">
+    <input type="text" id="task-input" class="input-box" value="Open problem statement 171 and download it" placeholder="Enter browser task..." />
+    <button id="btn-run" class="btn">▶ Start Autonomous Agent</button>
+    <button id="btn-stop" class="btn btn-danger">⏹ Kill Switch (Stop)</button>
+  </div>
+
+  <!-- Resource & Privacy Telemetry Card -->
+  <div class="card">
+    <div style="font-size: 11px; font-weight: bold; margin-bottom: 6px; color: #94a3b8;">On-Device Privacy & Resource Telemetry</div>
+    <div class="stat-grid">
+      <div><span class="stat-label">Hardware:</span> <span class="stat-val" id="stat-hardware">WebGPU / WASM</span></div>
+      <div><span class="stat-label">Inference Latency:</span> <span class="stat-val" id="stat-inf-latency">-- ms</span></div>
+      <div><span class="stat-label">E2E Elapsed:</span> <span class="stat-val" id="stat-e2e-latency">-- ms</span></div>
+      <div><span class="stat-label">JS Memory Heap:</span> <span class="stat-val" id="stat-memory">-- MB</span></div>
+      <div><span class="stat-label">PII Transmitted:</span> <span class="stat-zero">0 (ZERO)</span></div>
+      <div><span class="stat-label">Redacted Items:</span> <span class="stat-val" id="stat-redacted-count">0 Detected</span></div>
+    </div>
+  </div>
+
+  <!-- Live Observe-Plan-Act-Verify Timeline Box -->
+  <div class="card">
+    <div style="font-size: 11px; font-weight: bold; margin-bottom: 6px; color: #94a3b8; display: flex; justify-content: space-between;">
+      <span>Autonomous Agent Event Log</span>
+      <span id="lbl-loop-protect" style="color:#34d399; font-size:10px;">Loop Shield: OK</span>
+    </div>
+    <div id="log-box" class="debug-box">
+      <div class="step-log text-info">[READY] Background service worker online.</div>
+      <div class="step-log text-info">[READY] State persistence active (chrome.storage.session).</div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

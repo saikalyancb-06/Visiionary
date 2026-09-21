@@ -108,6 +108,10 @@ export function sanitizeTextForPII(text) {
   sanitized = sanitized.replace(PII_PATTERNS.AADHAAR, (m) => verhoeffCheck(m) ? '[REDACTED_AADHAAR]' : m);
   // 7. Phone
   sanitized = sanitized.replace(PII_PATTERNS.PHONE, '[REDACTED_PHONE]');
+  // 8. Bank Account
+  sanitized = sanitized.replace(PII_PATTERNS.BANK_ACCOUNT, '[REDACTED_BANK_ACCOUNT]');
+  // 9. PIN Code
+  sanitized = sanitized.replace(PII_PATTERNS.PIN_CODE, '[REDACTED_PIN_CODE]');
 
   return sanitized;
 }

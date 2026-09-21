@@ -1,4 +1,4 @@
-{
+﻿{
   "manifest_version": 3,
   "name": "PS26171 Privacy Browser Agent",
   "version": "1.0.0",
@@ -14,18 +14,18 @@
     "tabs",
     "scripting",
     "storage",
-    "offscreen",
-    "sidePanel",
     "downloads"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
-  "side_panel": {
-    "default_path": "src/ui/sidepanel.html"
+  "sidebar_action": {
+    "default_panel": "src/ui/sidepanel.html",
+    "default_title": "PS26171 Agent",
+    "default_icon": "icons/icon32.png"
   },
   "background": {
-    "service_worker": "src/background/background.js",
+    "scripts": ["src/background/background.js"],
     "type": "module"
   },
   "content_scripts": [
@@ -61,8 +61,5 @@
       ],
       "matches": ["<all_urls>"]
     }
-  ],
-  "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
-  }
+  ]
 }

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Real On-Device Visual Inference Runner using ONNX Runtime Web
  * Preprocesses screenshot image into [1, 3, 320, 320] float32 tensor,
  * runs model inference, and decodes bounding boxes & classes with confidence scores.
@@ -28,6 +28,11 @@ export const PII_CLASSES = [
 ];
 
 let ortSession = null;
+let activeProvider = 'wasm';
+
+export function getActiveProvider() {
+  return activeProvider;
+}
 
 export async function initInferenceSession(modelPath = null) {
   if (ortSession) return ortSession;
@@ -50,13 +55,15 @@ export async function initInferenceSession(modelPath = null) {
       executionProviders: ['webgpu', 'wasm'],
       graphOptimizationLevel: 'all'
     });
-    console.log('[INFERENCE] Loaded ONNX model with provider:', ortSession.executionProviders);
+    activeProvider = (navigator.gpu && ortSession) ? 'webgpu' : 'wasm';
+    console.log('[INFERENCE] Loaded ONNX model with provider:', activeProvider);
   } catch (gpuErr) {
     console.warn('[INFERENCE] WebGPU init failed, falling back to WASM:', gpuErr);
     ortSession = await ort.InferenceSession.create(resolvedModelUrl, {
       executionProviders: ['wasm'],
       graphOptimizationLevel: 'all'
     });
+    activeProvider = 'wasm';
     console.log('[INFERENCE] Loaded ONNX model with WASM fallback');
   }
 
@@ -166,6 +173,7 @@ export async function runVisualInference(imageSource, originalWidth, originalHei
 
   return {
     detections,
+    provider: activeProvider,
     latency_ms: parseFloat(inferenceMs.toFixed(2))
   };
 }

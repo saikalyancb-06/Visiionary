@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -29,12 +29,12 @@
   
   <div class="card">
     <div class="stat-grid">
-      <div><span class="stat-label">Local Perception:</span> <span class="stat-val">ONNX WebGPU/WASM</span></div>
-      <div><span class="stat-label">Network Destination:</span> <span class="stat-val">127.0.0.1 (Local)</span></div>
-      <div><span class="stat-label">External Network:</span> <span class="stat-zero">NONE (0 Bytes)</span></div>
+      <div><span class="stat-label">Hardware Acceleration:</span> <span class="stat-val" id="stat-hardware">WebGPU / WASM</span></div>
+      <div><span class="stat-label">Inference Latency:</span> <span class="stat-val" id="stat-inf-latency">-- ms</span></div>
+      <div><span class="stat-label">E2E Loop Latency:</span> <span class="stat-val" id="stat-e2e-latency">-- ms</span></div>
+      <div><span class="stat-label">Memory Footprint:</span> <span class="stat-val" id="stat-memory">-- MB</span></div>
       <div><span class="stat-label">PII Transmitted:</span> <span class="stat-zero" id="stat-pii-leaks">0 (ZERO)</span></div>
-      <div><span class="stat-label">Secrets Transmitted:</span> <span class="stat-zero" id="stat-secret-leaks">0 (ZERO)</span></div>
-      <div><span class="stat-label">Redacted Regions:</span> <span class="stat-val" id="stat-redacted-count">Active</span></div>
+      <div><span class="stat-label">Redacted Items:</span> <span class="stat-val" id="stat-redacted-count">0 Detected</span></div>
     </div>
   </div>
 

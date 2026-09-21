@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Real Pixel-Level Canvas Redaction Engine (Phase 6) & Post-Redaction Verification (Phase 7)
  * INVARIANT: Sensitive regions are replaced locally with solid opaque black blocks.
  * Post-redaction scanning ensures fail-closed defense: if any sensitive data persists, BLOCK EGRESS.
@@ -57,25 +57,100 @@ export async function redactImageCanvas(imageSource, sensitiveRegions) {
 }
 
 /**
+ * Extracts only textual payload fields for PII verification.
+ * EXCLUDES binary/base64 data (e.g. screenshot.data_url) to prevent false-positive matches on random base64 digits.
+ */
+export function collectTextEntriesForPrivacyScan(payload) {
+  const entries = [];
+
+  if (typeof payload.instruction_sanitized === 'string') {
+    entries.push({ field: 'instruction_sanitized', text: payload.instruction_sanitized });
+  }
+
+  if (payload.page) {
+    if (typeof payload.page.url_sanitized === 'string') {
+      entries.push({ field: 'page.url_sanitized', text: payload.page.url_sanitized });
+    }
+    if (typeof payload.page.title_sanitized === 'string') {
+      entries.push({ field: 'page.title_sanitized', text: payload.page.title_sanitized });
+    }
+  }
+
+  if (Array.isArray(payload.elements)) {
+    for (const el of payload.elements) {
+      if (typeof el.label === 'string') {
+        entries.push({ field: `elements[id=${el.id}].label`, text: el.label });
+      }
+      // NOTE: el.id is an opaque DOM identifier (e.g. Amazon uses numeric product IDs).
+      // Running PII regexes against DOM IDs causes false positives. EXCLUDED.
+    }
+  }
+
+  if (Array.isArray(payload.redactions)) {
+    for (const r of payload.redactions) {
+      if (typeof r.placeholder === 'string') {
+        entries.push({ field: `redactions[${r.id}].placeholder`, text: r.placeholder });
+      }
+    }
+  }
+
+  if (Array.isArray(payload.history)) {
+    for (let i = 0; i < payload.history.length; i++) {
+      const item = payload.history[i];
+      if (typeof item.action === 'string') {
+        entries.push({ field: `history[${i}].action`, text: item.action });
+      }
+      if (typeof item.result === 'string') {
+        entries.push({ field: `history[${i}].result`, text: item.result });
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
  * Post-Redaction Privacy Verification (Phase 7)
  * Scans the sanitized DOM context and outgoing package strings for any unredacted PII or secrets.
  * Must be FAIL-CLOSED: if scanner detects leak or throws error, returns safe = false.
  */
 export function verifyPostRedactionPrivacy(sanitizedPayload) {
   try {
-    const serialized = JSON.stringify(sanitizedPayload);
+    const textEntries = collectTextEntriesForPrivacyScan(sanitizedPayload);
+    const violations = [];
 
-    // 1. Scan for PII regex patterns
-    const piiMatches = scanTextForPII(serialized);
-    if (piiMatches.length > 0) {
+    // 1. Scan text entries for PII regex patterns (EXCLUDING binary base64 screenshots)
+    for (const entry of textEntries) {
+      const piiMatches = scanTextForPII(entry.text);
+      if (piiMatches.length > 0) {
+        for (const m of piiMatches) {
+          console.error(`[EGRESS DEBUG] PII candidate:
+field=${entry.field}
+type=${m.type}
+length=${m.length}
+fingerprint=${m.fingerprint}`);
+
+          violations.push({
+            field: entry.field,
+            type: m.type,
+            index: m.index,
+            length: m.length,
+            fingerprint: m.fingerprint
+          });
+        }
+      }
+    }
+
+    if (violations.length > 0) {
       return {
         safe: false,
         reason: 'Unredacted PII pattern found in sanitized payload',
-        violations: piiMatches
+        violations: violations
       };
     }
 
-    // 2. Scan for any raw vault secrets
+    // 2. Scan entire serialized package for raw vault secrets (checking exact strings)
+    const serialized = JSON.stringify(sanitizedPayload);
     const secretCheck = containsVaultSecret(serialized);
     if (secretCheck.leak) {
       return {
