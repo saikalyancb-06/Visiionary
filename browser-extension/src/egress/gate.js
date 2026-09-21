@@ -1,4 +1,4 @@
-﻿/**
+/**
  * EGRESS GATE (Architectural Choke Point — Phase 8)
  * SECTION B2 TRUST BOUNDARY ENFORCEMENT
  *
@@ -82,8 +82,24 @@ export async function sendSanitizedContextToGate(sanitizedPayload, serverUrl = '
     throw new EgressGateViolationError('Privacy scanner failure: failing closed.', [scanErr.message]);
   }
 
+  // Safe Audit Logging (Zero Raw PII Leakage)
+  const piiDetected = sanitizedPayload.privacy_report?.detected || 0;
+  const piiRedacted = sanitizedPayload.privacy_report?.redacted || 0;
+  const remainingCandidates = verification.violations ? verification.violations.length : 0;
+  
+  console.log(`[EGRESS AUDIT]
+PII Detection:
+  detected = ${piiDetected}
+  redacted = ${piiRedacted}
+  remaining_candidate_matches = ${remainingCandidates}
+Post-Sanitization Verification:
+  status = ${verification.safe ? 'PASS' : 'FAIL'}
+Egress Gate:
+  status = ${verification.safe ? 'ALLOWED' : 'BLOCKED'}`);
+
   if (!verification.safe) {
-    console.error('[EGRESS GATE] BLOCKED: Sensitive data detected in outgoing payload!', verification.violations);
+    // Log safe match metadata only (type, length, fingerprint) - NEVER raw PII values
+    console.error('[EGRESS GATE] BLOCKED: Candidate violations metadata:', verification.violations);
     throw new EgressGateViolationError(`Egress Gate blocked payload: ${verification.reason}`, verification.violations);
   }
 
@@ -91,7 +107,7 @@ export async function sendSanitizedContextToGate(sanitizedPayload, serverUrl = '
   const serialized = JSON.stringify(sanitizedPayload);
   const vaultCheck = containsVaultSecret(serialized);
   if (vaultCheck.leak) {
-    console.error(`[EGRESS GATE] BLOCKED: Vault secret '${vaultCheck.secretRef}' found in outgoing payload!`);
+    console.error(`[EGRESS GATE] BLOCKED: Vault secret reference leaked in payload.`);
     throw new EgressGateViolationError(`Vault credential leak detected for ${vaultCheck.secretRef}`);
   }
 

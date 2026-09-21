@@ -1,4 +1,4 @@
-﻿"""
+"""
 Updated Server Planner supporting Local Ollama LLM (Qwen3.5:9B):
 - Uses local Ollama LLM directly for task understanding and action selection
 - Zero hardcoded websites, coordinates, or element IDs
@@ -39,6 +39,22 @@ FORBIDDEN_RAW_SECRETS = [
     "SuperSecretPassword@2026",
     "sk-super-secret-key-12345"
 ]
+
+@app.get("/")
+def root():
+    ollama_info = check_ollama_status()
+    return {
+        "service": "Visiionary Local Planner Server",
+        "status": "online",
+        "privacy_shield": "active",
+        "planner": "LOCAL_OLLAMA" if ollama_info["available"] else "LOCAL_SEMANTIC",
+        "model": ollama_info["model"],
+        "endpoints": {
+            "health": "/api/health",
+            "plan": "/api/agent/plan",
+            "docs": "/docs"
+        }
+    }
 
 @app.get("/api/health")
 def health_check():

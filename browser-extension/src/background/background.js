@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Background Service Worker for Chrome MV3 Extension
  * Orchestrates multi-step closed-loop agent:
  * OBSERVE -> PERCEIVE -> SANITIZE -> EGRESS -> PLAN -> EXECUTE -> RE-OBSERVE -> VERIFY -> DONE
@@ -46,8 +46,33 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('[VISIIONARY] Extension installed & active across all domains.');
 });
 
+async function ensureContentScript(tabId) {
+  try {
+    const ping = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+    if (ping && ping.success) return true;
+  } catch (_) {
+    // Content script not yet present (tab was opened before extension was loaded/reloaded)
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['src/content/content.js']
+    });
+    // Brief settle time after dynamic injection
+    await new Promise(r => setTimeout(r, 100));
+    return true;
+  } catch (err) {
+    console.warn('[BACKGROUND] Could not auto-inject content script:', err.message);
+    return false;
+  }
+}
+
 // Capture and sanitize current tab state
 async function captureAndSanitizeTab(tabId, windowId, taskInstruction, stepNumber, history) {
+  // Ensure content script is running in the tab
+  await ensureContentScript(tabId);
+
   // 1. Capture visible viewport
   let screenshotDataUrl = null;
   try {
@@ -57,7 +82,12 @@ async function captureAndSanitizeTab(tabId, windowId, taskInstruction, stepNumbe
   }
 
   // 2. Request DOM snapshot from content script
-  const domRes = await chrome.tabs.sendMessage(tabId, { type: 'GET_DOM_SNAPSHOT' });
+  let domRes = null;
+  try {
+    domRes = await chrome.tabs.sendMessage(tabId, { type: 'GET_DOM_SNAPSHOT' });
+  } catch (domErr) {
+    console.warn('[BACKGROUND] GET_DOM_SNAPSHOT error:', domErr.message);
+  }
   const domElements = domRes && domRes.elements ? domRes.elements : [];
   const domSensitive = domRes && domRes.sensitiveRegions ? domRes.sensitiveRegions : [];
 

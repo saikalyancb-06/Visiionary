@@ -1,4 +1,4 @@
-﻿"""
+"""
 Verhoeff Checksum Algorithm for Indian Aadhaar Verification
 Normalizes Devanagari numerals and validates 12-digit format.
 """

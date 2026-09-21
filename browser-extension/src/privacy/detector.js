@@ -1,18 +1,18 @@
-﻿/**
+/**
  * PII Validator and Pattern Matcher
  * Layer 1 (Regex & Algorithmic Checksums) & Layer 2 (DOM Attribute Analysis)
  */
 
 export const PII_PATTERNS = {
   EMAIL: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-  PHONE: /(?:\+91[\-\s]?)?[6789]\d{4}[\-\s]?\d{5}/g,
+  PHONE: /\b(?:\+91[\-\s]?)?[6789]\d{4}[\-\s]?\d{5}\b/g,
   CARD_NUMBER: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
   PAN: /\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b/g,
   AADHAAR: /\b\d{4}[\-\s]?\d{4}[\-\s]?\d{4}\b/g,
-  BANK_ACCOUNT: /\b\d{9,18}\b/g,
+  BANK_ACCOUNT: /\b(?:A\/C|Account|Acc)[\s:#-]*\d{9,18}\b/gi,
   UPI: /[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}/g,
   IFSC: /\b[A-Z]{4}0[A-Z0-9]{6}\b/g,
-  PIN_CODE: /\b[1-9][0-9]{2}[\s]?[0-9]{3}\b/g
+  PIN_CODE: /\b[1-9][0-9]{2}\s?[0-9]{3}\b/g
 };
 
 /**
@@ -75,8 +75,47 @@ export function verhoeffCheck(numStr) {
 }
 
 /**
+ * Simple non-reversible token hash for safe diagnostic audit logging (Zero Raw PII Leakage)
+ */
+export function hashToken(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return 'fp_' + Math.abs(hash).toString(16).substring(0, 8);
+}
+
+/**
+ * Generic string sanitizer: detects genuine PII in text and replaces it with safe placeholders.
+ */
+export function sanitizeTextForPII(text) {
+  if (!text || typeof text !== 'string') return text;
+  let sanitized = text;
+
+  // 1. Email
+  sanitized = sanitized.replace(PII_PATTERNS.EMAIL, '[REDACTED_EMAIL]');
+  // 2. UPI
+  sanitized = sanitized.replace(PII_PATTERNS.UPI, (m) => m.includes('REDACTED') ? m : '[REDACTED_UPI]');
+  // 3. PAN
+  sanitized = sanitized.replace(PII_PATTERNS.PAN, '[REDACTED_PAN]');
+  // 4. IFSC
+  sanitized = sanitized.replace(PII_PATTERNS.IFSC, '[REDACTED_IFSC]');
+  // 5. Card with Luhn validation
+  sanitized = sanitized.replace(PII_PATTERNS.CARD_NUMBER, (m) => luhnCheck(m) ? '[REDACTED_CARD]' : m);
+  // 6. Aadhaar with Verhoeff validation
+  sanitized = sanitized.replace(PII_PATTERNS.AADHAAR, (m) => verhoeffCheck(m) ? '[REDACTED_AADHAAR]' : m);
+  // 7. Phone
+  sanitized = sanitized.replace(PII_PATTERNS.PHONE, '[REDACTED_PHONE]');
+
+  return sanitized;
+}
+
+/**
  * Scans a text string for sensitive PII patterns.
- * Returns array of matches: { type, value, index }
+ * Validates algorithmic checksums (Luhn, Verhoeff) to prevent false positives on random 16 or 12 digit numbers.
+ * Returns array of safe match metadata: { type, index, length, fingerprint }
  */
 export function scanTextForPII(text) {
   if (!text || typeof text !== 'string') return [];
@@ -89,10 +128,19 @@ export function scanTextForPII(text) {
       const val = m[0];
       if (val.includes('REDACTED')) continue;
 
+      // Algorithmic validation gates
+      if (type === 'CARD_NUMBER' && !luhnCheck(val)) {
+        continue; // Not a valid card number, don't falsely classify
+      }
+      if (type === 'AADHAAR' && !verhoeffCheck(val)) {
+        continue; // Not a valid Aadhaar number, don't falsely classify
+      }
+
       found.push({
         type,
-        value: val,
-        index: m.index
+        index: m.index,
+        length: val.length,
+        fingerprint: hashToken(val)
       });
     }
   }
