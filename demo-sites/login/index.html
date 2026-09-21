@@ -1,0 +1,59 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Apex Portal - Secure Authentication</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 40px 20px; display: flex; justify-content: center; align-items: center; min-height: 80vh; }
+    .card { background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 32px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    h2 { margin-top: 0; color: #38bdf8; font-size: 22px; text-align: center; }
+    .subtitle { color: #94a3b8; font-size: 13px; text-align: center; margin-bottom: 24px; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px; }
+    input[type="text"], input[type="password"] { width: 100%; box-sizing: border-box; padding: 10px 14px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 14px; }
+    input:focus { outline: none; border-color: #38bdf8; }
+    .btn { width: 100%; background: #0284c7; color: white; border: none; padding: 12px; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 8px; }
+    .btn:hover { background: #0369a1; }
+    .alert-success { background: #064e3b; border: 1px solid #059669; color: #34d399; padding: 12px; border-radius: 6px; font-size: 13px; margin-top: 16px; display: none; text-align: center; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Secure User Login</h2>
+    <div class="subtitle">Protected by On-Device Visual Privacy Shield</div>
+
+    <form id="login-form" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label for="username">Username / Email</label>
+        <input type="text" id="username" placeholder="Enter username..." autocomplete="username" value="ananya.sharma" />
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password (Shielded Vault Protected)</label>
+        <input type="password" id="password" data-pii="password" autocomplete="current-password" placeholder="••••••••••••" />
+      </div>
+
+      <button type="submit" id="btn-login" class="btn">Sign In to Account</button>
+    </form>
+
+    <div id="login-success-banner" class="alert-success">
+      ✓ Authentication Successful! Redirecting to Dashboard...
+    </div>
+  </div>
+
+  <script>
+    function handleLogin(e) {
+      e.preventDefault();
+      const user = document.getElementById('username').value;
+      const pass = document.getElementById('password').value;
+
+      if (user && pass) {
+        const banner = document.getElementById('login-success-banner');
+        banner.style.display = 'block';
+        banner.setAttribute('data-logged-in', 'true');
+        console.log('[LOGIN] User authenticated successfully locally.');
+      }
+    }
+  </script>
+</body>
+</html>

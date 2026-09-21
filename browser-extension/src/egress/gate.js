@@ -1,44 +1,101 @@
 ﻿/**
- * EGRESS GATE (Architectural Choke Point)
+ * EGRESS GATE (Architectural Choke Point — Phase 8)
  * SECTION B2 TRUST BOUNDARY ENFORCEMENT
  *
- * The gate is the ONLY module permitted to invoke network fetch.
- * It enforces payload scans for unredacted PII and blocks on any violation (Fail-Closed).
+ * INVARIANTS:
+ * 1. The Egress Gate is the ONLY module in the extension permitted to invoke network fetch.
+ * 2. It performs mandatory schema validation.
+ * 3. It runs a deep post-redaction privacy scan for PII and raw vault secrets.
+ * 4. It blocks on any violation (Fail-Closed).
+ * 5. Detector or scanner errors trigger immediate BLOCK (Fail-Closed).
  */
-import { PII_PATTERNS } from '../privacy/detector.js';
+
+import { verifyPostRedactionPrivacy } from '../privacy/redactor.js';
+import { containsVaultSecret } from '../vault/vault.js';
 
 export class EgressGateViolationError extends Error {
-  constructor(message, violations) {
+  constructor(message, violations = []) {
     super(message);
     this.name = 'EgressGateViolationError';
     this.violations = violations;
   }
 }
 
-export async function sendSanitizedContextToGate(sanitizedPayload, serverUrl, apiKey) {
-  // 1. Final Safety Scan across all serialized fields (Fail-Closed)
-  const violations = [];
-  const serialized = JSON.stringify(sanitizedPayload);
+/**
+ * Validates outgoing schema conforms strictly to SanitizedContextPackage
+ */
+export function validatePayloadSchema(payload) {
+  if (!payload || typeof payload !== 'object') {
+    throw new EgressGateViolationError('Payload must be a non-null object');
+  }
 
-  for (const [patternName, regex] of Object.entries(PII_PATTERNS)) {
-    // Reset regex state
-    regex.lastIndex = 0;
-    const matches = serialized.match(regex);
-    if (matches && matches.length > 0) {
-      // Exclude placeholder tokens such as [REDACTED_EMAIL]
-      const realLeaks = matches.filter(m => !m.includes('REDACTED'));
-      if (realLeaks.length > 0) {
-        violations.push({ pattern: patternName, matches: realLeaks });
+  const requiredFields = ['session_id', 'step', 'instruction_sanitized', 'page', 'privacy_report'];
+  for (const field of requiredFields) {
+    if (!(field in payload)) {
+      throw new EgressGateViolationError(`Missing required payload schema field: ${field}`);
+    }
+  }
+
+  if (typeof payload.instruction_sanitized !== 'string') {
+    throw new EgressGateViolationError('instruction_sanitized must be a string');
+  }
+
+  if (!payload.page || typeof payload.page.url_sanitized !== 'string') {
+    throw new EgressGateViolationError('page.url_sanitized must be a valid string');
+  }
+
+  // Ensure elements is an array
+  if (payload.elements && !Array.isArray(payload.elements)) {
+    throw new EgressGateViolationError('elements must be an array');
+  }
+
+  // Ensure sensitive raw data is NOT passed in elements
+  if (payload.elements) {
+    for (const el of payload.elements) {
+      if (el.sensitivity === 'sensitive_raw') {
+        throw new EgressGateViolationError(`Unsanitized raw element detected in payload: ${el.id}`);
       }
     }
   }
 
-  if (violations.length > 0) {
-    console.error('[EGRESS GATE] BLOCKED: Unredacted PII detected in outgoing payload!', violations);
-    throw new EgressGateViolationError('Egress Gate blocked payload: sensitive data detected.', violations);
+  return true;
+}
+
+/**
+ * The ONLY function authorized to communicate with the server/planner.
+ */
+export async function sendSanitizedContextToGate(sanitizedPayload, serverUrl = 'http://127.0.0.1:8080', apiKey = '') {
+  // Step 1: Validate schema
+  try {
+    validatePayloadSchema(sanitizedPayload);
+  } catch (schemaErr) {
+    console.error('[EGRESS GATE] BLOCKED: Malformed payload schema:', schemaErr.message);
+    throw schemaErr;
   }
 
-  // 2. Transmit only verified sanitized payload
+  // Step 2: Post-Redaction Deep Privacy Scan (Fail-Closed)
+  let verification;
+  try {
+    verification = verifyPostRedactionPrivacy(sanitizedPayload);
+  } catch (scanErr) {
+    console.error('[EGRESS GATE] BLOCKED: Detector failure (Fail-Closed triggered):', scanErr);
+    throw new EgressGateViolationError('Privacy scanner failure: failing closed.', [scanErr.message]);
+  }
+
+  if (!verification.safe) {
+    console.error('[EGRESS GATE] BLOCKED: Sensitive data detected in outgoing payload!', verification.violations);
+    throw new EgressGateViolationError(`Egress Gate blocked payload: ${verification.reason}`, verification.violations);
+  }
+
+  // Step 3: Vault isolation check
+  const serialized = JSON.stringify(sanitizedPayload);
+  const vaultCheck = containsVaultSecret(serialized);
+  if (vaultCheck.leak) {
+    console.error(`[EGRESS GATE] BLOCKED: Vault secret '${vaultCheck.secretRef}' found in outgoing payload!`);
+    throw new EgressGateViolationError(`Vault credential leak detected for ${vaultCheck.secretRef}`);
+  }
+
+  // Step 4: Transmit only verified sanitized payload
   const response = await fetch(`${serverUrl}/api/agent/plan`, {
     method: 'POST',
     headers: {
@@ -49,8 +106,10 @@ export async function sendSanitizedContextToGate(sanitizedPayload, serverUrl, ap
   });
 
   if (!response.ok) {
-    throw new Error(`Server returned HTTP ${response.status}: ${await response.text()}`);
+    const errText = await response.text();
+    throw new Error(`Server returned HTTP ${response.status}: ${errText}`);
   }
 
-  return await response.json();
+  const planResponse = await response.json();
+  return planResponse;
 }

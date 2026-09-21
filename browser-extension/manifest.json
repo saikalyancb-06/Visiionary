@@ -5,12 +5,18 @@
   "description": "On-device Visual Perception for Light-weight Browser Agents (ISRO PS 26171)",
   "permissions": [
     "activeTab",
+    "tabs",
     "scripting",
-    "storage"
+    "storage",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -24,6 +30,16 @@
     "default_popup": "src/ui/popup.html",
     "default_title": "PS26171 Agent"
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "public/*",
+        "public/ort/*",
+        "public/models/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
   }

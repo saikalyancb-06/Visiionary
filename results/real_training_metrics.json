@@ -1,0 +1,17 @@
+{
+  "metrics": [
+    {
+      "epoch": 1,
+      "train_loss": 3.132,
+      "val_loss": 3.1163,
+      "mean_iou": 0.0
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.9824,
+      "val_loss": 3.1034,
+      "mean_iou": 0.0
+    }
+  ],
+  "duration_s": 2.7699179649353027
+}

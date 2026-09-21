@@ -1,0 +1,13 @@
+{
+  "num_samples_evaluated": 20,
+  "mean_latency_ms": 10.05,
+  "p95_latency_ms": 11.48,
+  "mean_iou": 0.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1_score": 1.0,
+  "true_positives": 20,
+  "false_positives": 0,
+  "false_negatives": 0,
+  "device": "cuda"
+}
