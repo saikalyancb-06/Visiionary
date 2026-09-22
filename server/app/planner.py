@@ -113,19 +113,28 @@ def track_subgoal_progress(task: str, current_url: str, page_title: str, element
             if (has_typed and any(w in page_text for w in query_words)) or (len(history_actions) >= 2 and any(w in page_text for w in query_words)):
                 completed.append(sg)
         elif sg_l.startswith("identify "):
-            # Evidence of target item identified:
-            # e.g., best seller badge/label visible on screen, or specific rating visible, or product card clicked
-            crit = extract_selection_criterion(task)
-            if crit:
-                _, disp = crit
-                disp_tokens = disp.split()
-                has_badge = any(all(dt in e.label.lower() for dt in disp_tokens) for e in elements)
-                has_clicked_item = any(h.get("action") == "click" for h in history if isinstance(h, dict) and "item" in str(h).lower())
-                # If badge is found on page or item is clicked
-                if has_badge or has_clicked_item or len(history_actions) >= 3:
-                    completed.append(sg)
-            else:
-                if len(history_actions) >= 2:
+            # Strict Invariant: TARGET_IDENTIFIED == true ONLY IF candidate satisfies ALL hard constraints.
+            # Action count is NOT evidence of semantic success.
+            from server.app.product_constraints import extract_product_constraints, verify_candidate_match, verify_selection_criterion_evidence
+            constraints = extract_product_constraints(task)
+            
+            # Look for a candidate on page that satisfies ALL required hard constraints
+            matching_candidate = None
+            for e in elements:
+                if e.role in ("a", "link", "h2", "h3", "div", "button") and len(e.label.strip()) > 3:
+                    ok_cand, _ = verify_candidate_match(e.label, constraints)
+                    if ok_cand:
+                        matching_candidate = e
+                        break
+
+            if matching_candidate:
+                crit = constraints.get("selection_criterion")
+                if crit:
+                    # Selection criterion requires observable evidence (e.g. badge / label)
+                    has_ev, _ = verify_selection_criterion_evidence(matching_candidate.label, constraints)
+                    if has_ev:
+                        completed.append(sg)
+                else:
                     completed.append(sg)
         elif "problem statement" in sg_l and sg_l.startswith("locate "):
             num_m = re.search(r'([0-9]{2,5})', sg_l)
@@ -204,6 +213,20 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
 
     elements = [el for el in payload.elements if el.interactable and el.sensitivity != "sensitive_raw"]
 
+    # Structured Loop / Failure Recovery Handling (Requirement 13)
+    recovery_info = payload.recovery_state or (payload.verification_state.get("recovery_state") if payload.verification_state else None)
+    blocked_element_id = None
+    if recovery_info:
+        rec_type = recovery_info.get("failure_type")
+        if rec_type in ("REPEATED_ACTION", "WRONG_CANDIDATE", "BLOCKED_ACTION"):
+            blocked_act = recovery_info.get("blocked_action", {})
+            if isinstance(blocked_act, dict) and blocked_act.get("target"):
+                blocked_element_id = blocked_act.get("target")
+            elif recovery_info.get("blocked_target_id"):
+                blocked_element_id = recovery_info.get("blocked_target_id")
+            if blocked_element_id:
+                elements = [el for el in elements if el.id != blocked_element_id]
+
     # 0. Universal Navigation Intent: "open X", "go to X", "navigate to X"
     nav_match = re.search(r'(?:open|go to|navigate to|visit)\s+([a-zA-Z0-9\s._/:-]+)', task_lower)
     clean_name = ""
@@ -213,7 +236,10 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
         # Clean query: strip words like "portal", "website", "the", "and search...", etc.
         clean_name = re.sub(r'^(the|a|an)\s+', '', raw_query, flags=re.IGNORECASE).strip()
         clean_name = re.sub(r'\s+(and|then|to|for)\s+.*$', '', clean_name, flags=re.IGNORECASE).strip()
-        target_name = re.sub(r'\b(portal|website|page|site|webpage|online)\b', '', clean_name, flags=re.IGNORECASE).strip()
+        target_name = re.sub(r'\b(portal|website|page|site|webpage|online|it|them|item)\b', '', clean_name, flags=re.IGNORECASE).strip()
+        if target_name in ("", "it", "them", "item", "this", "that"):
+            nav_match = None
+
 
     has_navigated = any(h == "navigate" for h in history_actions)
     curr_url = (payload.page.url_sanitized or '').lower()
@@ -526,12 +552,16 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
                 BrowserAction(type="wait", milliseconds=500)
             ], f"Semantically selected candidate element '{best_el.label}' (id={best_el.id}, score={scored[0][1]})."
 
-    # 9. Fallback: Wait or yield to independent goal verifier
+    # 9. Fallback: For semantic product/item tasks, NEVER select an arbitrary candidate or click elements[0]
+    if req_pt or constraints.get("requested_action"):
+        return [
+            BrowserAction(type="scroll", direction="down", amount=400),
+            BrowserAction(type="wait", milliseconds=400)
+        ], "NO_VALID_CANDIDATE: No interactive elements satisfied semantic task requirements. Scrolling to inspect more candidates."
+
     if history_actions:
         return [BrowserAction(type="wait", milliseconds=300)], "Action completed; yielding to independent goal verifier."
     
-    first = elements[0]
     return [
-        BrowserAction(type="click", target=ActionTarget(element_id=first.id)),
-        BrowserAction(type="wait", milliseconds=300)
-    ], f"Defaulted to first actionable element '{first.label}' (id={first.id})."
+        BrowserAction(type="wait", milliseconds=500)
+    ], "Awaiting clear actionable candidate matching task criteria."

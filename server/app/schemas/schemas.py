@@ -53,6 +53,7 @@ class SanitizedContextPackage(BaseModel):
     product_constraints: Optional[Dict[str, Any]] = None
     selected_target: Optional[Dict[str, Any]] = None
     missing_prerequisites: Optional[Dict[str, Any]] = None
+    recovery_state: Optional[Dict[str, Any]] = None
 
 class ActionTarget(BaseModel):
     element_id: Optional[str] = None
@@ -83,6 +84,8 @@ class AgentPlanResponse(BaseModel):
     product_constraints: Optional[Dict[str, Any]] = None
     selected_target: Optional[Dict[str, Any]] = None
     missing_prerequisites: Optional[Dict[str, Any]] = None
+    recovery_state: Optional[Dict[str, Any]] = None
+    state: str = "IDLE"  # SEARCH_COMPLETE | TARGET_CANDIDATE_FOUND | TARGET_IDENTIFIED | TARGET_VERIFIED | PREREQUISITES_RESOLVED | ACTION_EXECUTED | ACTION_VERIFIED | GOAL_ACHIEVED
 
 class DownloadItem(BaseModel):
     id: Optional[int] = None
@@ -101,6 +104,12 @@ class VerificationPayload(BaseModel):
     last_action: Optional[Dict[str, Any]] = None
     product_constraints: Optional[Dict[str, Any]] = None
     selected_target: Optional[Dict[str, Any]] = None
+    target_evidence: List[str] = Field(default_factory=list)
+    completed_subgoals: List[str] = Field(default_factory=list)
+    remaining_subgoals: List[str] = Field(default_factory=list)
+    required_prerequisites: List[str] = Field(default_factory=list)
+    resolved_prerequisites: List[str] = Field(default_factory=list)
+    last_action_result: Optional[Dict[str, Any]] = None
 
 class VerificationResponse(BaseModel):
     achieved: bool
@@ -114,4 +123,8 @@ class VerificationResponse(BaseModel):
     remaining_goal: str = ""
     target_match: Optional[bool] = None
     selected_target: Optional[Dict[str, Any]] = None
+    target_evidence: List[str] = Field(default_factory=list)
+    verification_state: str = "INITIAL"
+    product_state: str = "SEARCH_COMPLETE"  # SEARCH_COMPLETE | TARGET_CANDIDATE_FOUND | TARGET_IDENTIFIED | TARGET_VERIFIED | PREREQUISITES_RESOLVED | ACTION_EXECUTED | ACTION_VERIFIED | GOAL_ACHIEVED
+    recovery_state: Optional[Dict[str, Any]] = None
 

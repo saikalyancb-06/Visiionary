@@ -541,6 +541,134 @@ pc_source = inspect.getsource(pc_mod)
 has_forbidden_domain = any(f'"{d}' in pc_source or f"'{d}" in pc_source for d in ["amazon", "flipkart", "ebay", "walmart", "target", "shopify", "myntra"])
 results.append(("TEST 18.M: Zero hardcoded shopping websites or domains in product constraints engine", not has_forbidden_domain))
 
+# ==============================================================================
+# SECTION 19: STRICT PRODUCT TASK STATE MACHINE TESTS (TEST 1 - 12)
+# ==============================================================================
+from server.app.product_constraints import (
+    verify_selection_criterion_evidence,
+    STATE_SEARCH_COMPLETE,
+    STATE_TARGET_CANDIDATE_FOUND,
+    STATE_TARGET_IDENTIFIED,
+    STATE_TARGET_VERIFIED,
+    STATE_PREREQUISITES_RESOLVED,
+    STATE_ACTION_EXECUTED,
+    STATE_ACTION_VERIFIED,
+    STATE_GOAL_ACHIEVED
+)
+
+# TEST 19.1: Requested product is shirt, observed is dress -> TARGET_IDENTIFIED = false
+const_t1 = extract_product_constraints("find a black shirt")
+match_t1, reason_t1 = verify_candidate_match("Evening Black Cocktail Dress", const_t1)
+results.append(("TEST 19.1: Requested shirt vs observed dress -> candidate rejected (TARGET_IDENTIFIED = false)", not match_t1 and "product type mismatch" in reason_t1.lower()))
+
+# TEST 19.2: Requested gender is men, observed candidate is women -> candidate rejected
+const_t2 = extract_product_constraints("find a black shirt for men")
+match_t2, reason_t2 = verify_candidate_match("Women's Slim Fit Black Shirt", const_t2)
+results.append(("TEST 19.2: Requested gender men vs observed women -> candidate rejected", not match_t2 and "gender" in reason_t2.lower()))
+
+# TEST 19.3: Requested color is black, observed candidate is blue -> candidate rejected
+const_t3 = extract_product_constraints("find a black shirt")
+match_t3, reason_t3 = verify_candidate_match("Men's Formal Blue Shirt", const_t3)
+results.append(("TEST 19.3: Requested color black vs observed blue -> candidate rejected", not match_t3 and "color" in reason_t3.lower()))
+
+# TEST 19.4: Candidate satisfies product type/color/gender but selection criterion is not proven -> TARGET_VERIFIED = false
+const_t4 = extract_product_constraints("find the best-selling black shirt for men and open it")
+cand_t4_text = "Men's Regular Fit Black Shirt"
+match_t4_hard, _ = verify_candidate_match(cand_t4_text, const_t4)
+ev_t4, reason_t4 = verify_selection_criterion_evidence(cand_t4_text, const_t4)
+results.append(("TEST 19.4: Candidate satisfies hard constraints but criterion is unproven -> not verified", match_t4_hard and not ev_t4 and "no observable evidence" in reason_t4.lower()))
+
+# TEST 19.5: Valid product requires size selection, no size specified, multiple available -> ASK_USER
+const_t5 = extract_product_constraints("find a black shirt and add to cart")
+elems_t5 = [
+    ElementMetadata(id="sz_drop", role="select", label="Select Size", interactable=True, bbox=[0, 0, 100, 30]),
+    ElementMetadata(id="sz_s", role="option", label="S", interactable=True, bbox=[0, 10, 50, 20]),
+    ElementMetadata(id="sz_m", role="option", label="M", interactable=True, bbox=[0, 30, 50, 20]),
+    ElementMetadata(id="sz_l", role="option", label="L", interactable=True, bbox=[0, 50, 50, 20]),
+    ElementMetadata(id="btn_cart", role="button", label="Add to Cart", interactable=True, bbox=[0, 70, 100, 40])
+]
+prereq_t5 = detect_missing_prerequisites(elems_t5, "ADD_TO_CART", const_t5)
+payload_t5 = make_payload(
+    instruction_sanitized="find a black shirt and add to cart",
+    page=PageContext(url_sanitized="https://generic-store.com/p/black-shirt", title_sanitized="Black Shirt - generic-store", viewport={"w": 1280, "h": 720}),
+    elements=elems_t5,
+    history=[{"action": "navigate"}, {"action": "click"}]
+)
+acts_t5, _ = decide_next_action(payload_t5)
+results.append(("TEST 19.5: Required size unspecified with multiple choices returns ASK_USER without random guessing", prereq_t5["requires_prompt"] and acts_t5[0].type == "ask_user" and "size" in acts_t5[0].question.lower()))
+
+# TEST 19.6: Required size is already safely selected -> agent may continue without prompt
+elems_t6 = [
+    ElementMetadata(id="sz_drop", role="select", label="Select Size: M (Selected)", interactable=True, bbox=[0, 0, 100, 30]),
+    ElementMetadata(id="btn_cart", role="button", label="Add to Cart", interactable=True, bbox=[0, 70, 100, 40])
+]
+prereq_t6 = detect_missing_prerequisites(elems_t6, "ADD_TO_CART", const_t5)
+results.append(("TEST 19.6: Required size already safely selected -> prereq detector returns None to proceed", prereq_t6 is None))
+
+# TEST 19.7: Add-to-cart click executes but no cart state changes -> ACTION_EXECUTED=true, ACTION_VERIFIED=false, GOAL_ACHIEVED=false
+payload_t7 = VerificationPayload(
+    task="find a black shirt and add to cart",
+    current_url="https://generic-store.com/p/black-shirt",
+    page_title="Men's Black Shirt",
+    action_history=[{"action": "navigate"}, {"action": "click"}, {"action": "click"}],
+    downloads=[]
+)
+resp_t7 = verify_task_completion(payload_t7)
+results.append(("TEST 19.7: Add-to-cart click executes without cart state change -> ACTION_EXECUTED, not achieved", not resp_t7.achieved and resp_t7.product_state == STATE_ACTION_EXECUTED and resp_t7.goal_status == "GOAL_NOT_YET_ACHIEVED"))
+
+# TEST 19.8: Cart state changes and contains selected valid target -> ACTION_VERIFIED=true, GOAL_ACHIEVED=true
+payload_t8 = VerificationPayload(
+    task="find a black shirt and add to cart",
+    current_url="https://generic-store.com/cart",
+    page_title="Men's Black Shirt - Added to Cart (1 Item)",
+    action_history=[{"action": "navigate"}, {"action": "click"}, {"action": "click"}],
+    downloads=[]
+)
+resp_t8 = verify_task_completion(payload_t8)
+results.append(("TEST 19.8: Cart state changes with valid target -> GOAL_ACHIEVED verified", resp_t8.achieved and resp_t8.product_state == STATE_GOAL_ACHIEVED and resp_t8.goal_status == "GOAL_ACHIEVED"))
+
+# TEST 19.9: Repeated failed click is blocked by structured recovery state
+payload_t9 = make_payload(
+    instruction_sanitized="find a black shirt and open it",
+    elements=[
+        ElementMetadata(id="btn_stuck", role="a", label="Stuck Item Black Shirt", interactable=True, bbox=[0, 0, 100, 20]),
+        ElementMetadata(id="link_other", role="a", label="Alternative Black Shirt", interactable=True, bbox=[0, 30, 100, 20])
+    ],
+    history=[{"action": "click", "target": "btn_stuck"}]
+)
+payload_t9.recovery_state = {
+    "failure_type": "REPEATED_ACTION",
+    "blocked_action": {"type": "click", "target": "btn_stuck"},
+    "blocked_target_id": "btn_stuck"
+}
+acts_t9, sum_t9 = decide_next_action(payload_t9)
+results.append(("TEST 19.9: Repeated action is blocked by structured recovery state, selecting alternative", acts_t9[0].target.element_id == "link_other"))
+
+# TEST 19.10: Unrelated URL/query parameter containing target keyword is rejected by identity resolver
+from server.app.validator import extract_url_identity
+_, _, id_tokens_t10 = extract_url_identity("https://account.generic.org/signin?continue=https%3A%2F%2Fstore.org%2Fblack-shirt%3Fref%3D123")
+results.append(("TEST 19.10: Keyword inside query parameter is excluded from URL identity tokens", "shirt" not in id_tokens_t10 and "black" not in id_tokens_t10))
+
+# TEST 19.11: Search returns multiple products; only one satisfies ALL hard constraints
+cand_t11_1 = ElementMetadata(id="c1", role="a", label="Women's Black Shirt", interactable=True, bbox=[0, 0, 100, 20])
+cand_t11_2 = ElementMetadata(id="c2", role="a", label="Men's Blue Shirt", interactable=True, bbox=[0, 30, 100, 20])
+cand_t11_3 = ElementMetadata(id="c3", role="a", label="Men's Black Shirt", interactable=True, bbox=[0, 60, 100, 20])
+const_t11 = extract_product_constraints("find a black shirt for men and open it")
+valid_t11 = [c for c in [cand_t11_1, cand_t11_2, cand_t11_3] if verify_candidate_match(c.label, const_t11)[0]]
+results.append(("TEST 19.11: Out of multiple products, only candidate satisfying all hard constraints is selected", len(valid_t11) == 1 and valid_t11[0].id == "c3"))
+
+# TEST 19.12: No candidate satisfies all hard constraints -> NO_VALID_TARGET_FOUND, never choose closest match
+payload_t12 = make_payload(
+    instruction_sanitized="find a purple leather jacket and open it",
+    elements=[
+        ElementMetadata(id="e1", role="a", label="Black Leather Jacket", interactable=True, bbox=[0, 0, 100, 20]),
+        ElementMetadata(id="e2", role="a", label="Purple Cotton Hoodie", interactable=True, bbox=[0, 30, 100, 20])
+    ],
+    history=[{"action": "navigate"}]
+)
+acts_t12, sum_t12 = decide_next_action(payload_t12)
+results.append(("TEST 19.12: No candidate satisfies all hard constraints yields NO_VALID_TARGET_FOUND without selecting closest match", "NO_VALID_TARGET_FOUND" in sum_t12 and acts_t12[0].type == "scroll"))
+
 # Print summary
 passed = 0
 failed = 0

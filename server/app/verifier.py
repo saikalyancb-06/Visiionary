@@ -95,16 +95,45 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
         has_cart_evidence = any(ind in combined_page_text for ind in cart_success_indicators)
         has_click = any(h == "click" for h in history_actions)
 
-        if has_cart_evidence and has_click:
+        # Re-verify that target constraints are satisfied on the page where action occurred
+        from server.app.product_constraints import (
+            extract_product_constraints,
+            verify_candidate_match,
+            STATE_ACTION_EXECUTED,
+            STATE_ACTION_VERIFIED,
+            STATE_GOAL_ACHIEVED
+        )
+        constraints = payload.product_constraints or extract_product_constraints(task)
+        matches_target = True
+        match_reason = "ok"
+        if constraints.get("product_type"):
+            matches_target, match_reason = verify_candidate_match(combined_page_text, constraints)
+
+        if has_cart_evidence and has_click and matches_target:
             return VerificationResponse(
                 achieved=True,
                 confidence=0.98,
-                reason="Goal verified achieved: Item successfully added to cart and confirmed in browser state.",
+                reason="Goal verified achieved: Item matching all constraints successfully added to cart and confirmed in browser state.",
                 next_hint=None,
                 goal_status="GOAL_ACHIEVED",
                 subgoals=subgoals,
                 completed_subgoals=subgoals,
-                remaining_goal="None"
+                remaining_goal="None",
+                product_state=STATE_GOAL_ACHIEVED,
+                verification_state="GOAL_ACHIEVED"
+            )
+        elif has_click and not has_cart_evidence:
+            return VerificationResponse(
+                achieved=False,
+                confidence=0.85,
+                reason="Goal not yet achieved: Cart action executed but cart postcondition not observable in browser state.",
+                next_hint="Identify the target item and click 'Add to Cart'.",
+                goal_status="GOAL_NOT_YET_ACHIEVED",
+                subgoals=subgoals,
+                completed_subgoals=completed_subgoals,
+                remaining_goal="add selected item to cart",
+                product_state=STATE_ACTION_EXECUTED,
+                verification_state="ACTION_EXECUTED"
             )
         else:
             return VerificationResponse(
@@ -115,7 +144,9 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
                 goal_status="GOAL_NOT_YET_ACHIEVED",
                 subgoals=subgoals,
                 completed_subgoals=completed_subgoals,
-                remaining_goal="add selected item to cart"
+                remaining_goal="add selected item to cart",
+                product_state="PREREQUISITES_RESOLVED",
+                verification_state="PENDING_ACTION"
             )
 
     # -------------------------------------------------------------------------
@@ -189,11 +220,19 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
                     confidence=0.90,
                     reason=f"TARGET_MISMATCH: Opened page does not match required product constraints ({match_reason}).",
                     next_hint="Navigate back and select a candidate matching the exact product type and attributes.",
+                    requires_recovery=True,
                     goal_status="RECOVERY_REQUIRED",
                     subgoals=subgoals,
                     completed_subgoals=completed_subgoals,
                     remaining_goal="recover and select correct product",
-                    target_match=False
+                    target_match=False,
+                    product_state="TARGET_CANDIDATE_FOUND",
+                    verification_state="RECOVERY_REQUIRED",
+                    recovery_state={
+                        "failure_type": "WRONG_CANDIDATE",
+                        "reason": match_reason,
+                        "required_recovery": "choose_different_candidate"
+                    }
                 )
 
             return VerificationResponse(
@@ -205,7 +244,9 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
                 subgoals=subgoals,
                 completed_subgoals=subgoals,
                 remaining_goal="None",
-                target_match=True
+                target_match=True,
+                product_state="GOAL_ACHIEVED",
+                verification_state="GOAL_ACHIEVED"
             )
         else:
             return VerificationResponse(
@@ -216,7 +257,9 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
                 goal_status="GOAL_NOT_YET_ACHIEVED",
                 subgoals=subgoals,
                 completed_subgoals=completed_subgoals,
-                remaining_goal="open selected product"
+                remaining_goal="open selected product",
+                product_state="SEARCH_COMPLETE",
+                verification_state="PENDING_SELECTION"
             )
 
     # -------------------------------------------------------------------------
