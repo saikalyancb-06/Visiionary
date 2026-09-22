@@ -645,6 +645,19 @@ async function executeAction(action) {
         }
       }
 
+      // Safeguard against typing element IDs / internal tags into input
+      const targetIdStr = typeof action.target === 'string' ? action.target : (action.target?.element_id || '');
+      const isInternalId = /^(visi_el_\d+|red_\d+|element_\d+|name_[\w-]+)$/i.test(textToType.trim());
+      if (!textToType.trim() || textToType === targetIdStr || isInternalId) {
+        console.warn(`[CONTENT EXECUTOR] Refused to type element ID or empty text: "${textToType}"`);
+        return {
+          success: false,
+          action_executed: false,
+          target_found: true,
+          error: `Refused to type internal identifier or empty value: "${textToType}"`
+        };
+      }
+
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.focus();
 

@@ -50,6 +50,9 @@ class SanitizedContextPackage(BaseModel):
     metrics: Optional[Dict[str, Any]] = None
     history: List[Dict[str, Any]] = Field(default_factory=list)
     verification_state: Optional[Dict[str, Any]] = None
+    product_constraints: Optional[Dict[str, Any]] = None
+    selected_target: Optional[Dict[str, Any]] = None
+    missing_prerequisites: Optional[Dict[str, Any]] = None
 
 class ActionTarget(BaseModel):
     element_id: Optional[str] = None
@@ -77,6 +80,9 @@ class AgentPlanResponse(BaseModel):
     subgoals: List[str] = Field(default_factory=list)
     completed_subgoals: List[str] = Field(default_factory=list)
     remaining_goal: str = ""
+    product_constraints: Optional[Dict[str, Any]] = None
+    selected_target: Optional[Dict[str, Any]] = None
+    missing_prerequisites: Optional[Dict[str, Any]] = None
 
 class DownloadItem(BaseModel):
     id: Optional[int] = None
@@ -93,6 +99,8 @@ class VerificationPayload(BaseModel):
     action_history: List[Dict[str, Any]] = Field(default_factory=list)
     downloads: List[DownloadItem] = Field(default_factory=list)
     last_action: Optional[Dict[str, Any]] = None
+    product_constraints: Optional[Dict[str, Any]] = None
+    selected_target: Optional[Dict[str, Any]] = None
 
 class VerificationResponse(BaseModel):
     achieved: bool
@@ -104,3 +112,6 @@ class VerificationResponse(BaseModel):
     subgoals: List[str] = Field(default_factory=list)
     completed_subgoals: List[str] = Field(default_factory=list)
     remaining_goal: str = ""
+    target_match: Optional[bool] = None
+    selected_target: Optional[Dict[str, Any]] = None
+

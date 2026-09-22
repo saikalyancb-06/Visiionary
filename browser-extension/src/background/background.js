@@ -400,7 +400,7 @@ async function getRecentDownloads() {
 // ---------------------------------------------------------------------------
 // Call Independent Task Verifier on Server
 // ---------------------------------------------------------------------------
-async function verifyWithServer(taskInstruction, currentUrl, pageTitle, screenSummary, pageElements, recentDownloads, history) {
+async function verifyWithServer(taskInstruction, currentUrl, pageTitle, screenSummary, pageElements, recentDownloads, history, productConstraints, selectedTarget) {
   try {
     const payload = {
       task: taskInstruction,
@@ -415,7 +415,9 @@ async function verifyWithServer(taskInstruction, currentUrl, pageTitle, screenSu
         mime_type: d.mime,
         state: d.state,
         file_size: d.total_bytes
-      }))
+      })),
+      product_constraints: productConstraints || null,
+      selected_target: selectedTarget || null
     };
 
     const res = await fetch('http://127.0.0.1:8080/api/agent/verify', {
@@ -531,12 +533,18 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
       agentState.currentAction = 'Requesting plan from Egress Gate...';
       broadcastStateUpdate(`[PLAN] Sending sanitized context (${sanitizedPayload.elements.length} elements) to planner...`);
 
+      // Attach preserved product constraints and selected target across iterations
+      sanitizedPayload.product_constraints = agentState.productConstraints || null;
+      sanitizedPayload.selected_target = agentState.selectedTarget || null;
+
       const plan = await sendSanitizedContextToGate(sanitizedPayload, 'http://127.0.0.1:8080');
 
       if (plan && plan.subgoals) {
         agentState.subgoals = plan.subgoals;
         agentState.completedSubgoals = plan.completed_subgoals || [];
         agentState.remainingGoal = plan.remaining_goal || '';
+        if (plan.product_constraints) agentState.productConstraints = plan.product_constraints;
+        if (plan.selected_target) agentState.selectedTarget = plan.selected_target;
       }
 
       if (!plan || !plan.actions || plan.actions.length === 0) {
@@ -544,9 +552,52 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
         break;
       }
 
-      // Check for repeated identical action (Requirement 6: Loop Shield Must Change Strategy)
-      const firstAction = plan.actions[0];
-      const currentActionKey = `${firstAction.type}_${firstAction.target?.element_id || firstAction.url || ''}`;
+      // Deterministic Client-side Action Validator & Loop Shield Enforcer
+      const blockedSigs = new Set(agentState.loopProtection.blockedSignatures || []);
+      const validatedPlanActions = [];
+
+      for (const candidateAct of plan.actions) {
+        const actSig = `${candidateAct.type}:${candidateAct.target?.element_id || ''}:${candidateAct.url || ''}:${candidateAct.value?.text || ''}`;
+        
+        // Loop Shield: If signature is blocked, force recovery pivot
+        if (blockedSigs.has(actSig)) {
+          broadcastStateUpdate(`[LOOP SHIELD] Blocked signature encountered: ${actSig}. Pivoting strategy...`, 'warn');
+          // Find alternative actionable element or link
+          const altLink = sanitizedPayload.elements.find(e => (e.role === 'a' || e.role === 'link') && e.href && e.id !== candidateAct.target?.element_id);
+          if (altLink && altLink.href) {
+            candidateAct.type = 'open_link';
+            candidateAct.url = altLink.href;
+            candidateAct.target = { element_id: altLink.id };
+            broadcastStateUpdate(`[LOOP SHIELD] Pivoted to alternative link: ${altLink.label} (${altLink.href})`);
+          } else {
+            candidateAct.type = 'scroll';
+            candidateAct.direction = 'down';
+            candidateAct.amount = 450;
+            broadcastStateUpdate('[LOOP SHIELD] Pivoted to page scroll to discover new elements.');
+          }
+        }
+
+        // Anti-Element-ID typing check
+        if (candidateAct.type === 'type' || candidateAct.type === 'search') {
+          const typeVal = (candidateAct.value?.text || candidateAct.text || '').trim();
+          const targetId = candidateAct.target?.element_id || '';
+          if (!typeVal || typeVal === targetId || /^(visi_el_\d+|red_\d+|element_\d+|name_[\w-]+)$/i.test(typeVal)) {
+            broadcastStateUpdate(`[VALIDATOR] Rejected invalid TYPE value "${typeVal}" matching element ID.`, 'warn');
+            continue;
+          }
+        }
+
+        validatedPlanActions.push(candidateAct);
+      }
+
+      if (validatedPlanActions.length === 0) {
+        broadcastStateUpdate('[VALIDATOR] All planned actions failed validation. Requesting state refresh...', 'warn');
+        validatedPlanActions.push({ type: 'wait', milliseconds: 500 });
+      }
+
+      // Check for repeated identical action (Loop Shield)
+      const firstAction = validatedPlanActions[0];
+      const currentActionKey = `${firstAction.type}:${firstAction.target?.element_id || firstAction.url || ''}`;
       if (currentActionKey === lastActionKey) {
         consecutiveSameActionCount++;
       } else {
@@ -554,14 +605,22 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
         consecutiveSameActionCount = 1;
       }
 
-      if (consecutiveSameActionCount >= 2 && firstAction.type === 'click') {
-        broadcastStateUpdate(`[LOOP SHIELD] Repeated click with no state change detected. Forcing recovery strategy (open_link / alternative navigation)...`, 'warn');
+      if (consecutiveSameActionCount >= 2) {
+        broadcastStateUpdate(`[LOOP SHIELD] Repeated action detected (${currentActionKey}). Hard-blocking signature and recovering...`, 'warn');
+        blockedSigs.add(currentActionKey);
+        agentState.loopProtection.blockedSignatures = Array.from(blockedSigs);
+        
         // Find if target element has an observed href or find an alternative link
         const targetEl = sanitizedPayload.elements.find(e => e.id === firstAction.target?.element_id);
         if (targetEl && targetEl.href) {
           firstAction.type = 'open_link';
           firstAction.url = targetEl.href;
           broadcastStateUpdate(`[LOOP SHIELD] Converted repeated click into open_link: ${targetEl.href}`);
+        } else {
+          firstAction.type = 'scroll';
+          firstAction.direction = 'down';
+          firstAction.amount = 400;
+          broadcastStateUpdate('[LOOP SHIELD] Converted repeated action into scroll down.');
         }
       }
 
@@ -572,7 +631,7 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
       const preActionTitle = sanitizedPayload.page?.title_sanitized || '';
       const preActionSignature = pageSignature;
 
-      for (const act of plan.actions) {
+      for (const act of validatedPlanActions) {
         if (!agentState.isRunning) break;
 
         if (act.type === 'done') {
@@ -632,7 +691,9 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
         postActionPayload.page?.screen_summary || {},
         postActionPayload.elements,
         recentDownloads,
-        agentState.history
+        agentState.history,
+        agentState.productConstraints,
+        agentState.selectedTarget
       );
 
       const isVerified = Boolean(verification && (verification.achieved || verification.verified));

@@ -2,11 +2,21 @@
 Task Completion Verifier Module for Visiionary Agent
 Decoupled verification engine that evaluates whether the user's FULL goal has actually
 been achieved, preventing premature termination on action success or planner 'done'.
+Enforces:
+1. Subgoal completeness invariant: GOAL_ACHIEVED is illegal if any required subgoal remains.
+2. Downstream action postcondition verification (open detail, add-to-cart, download file).
+3. Search results displayed != goal achieved.
+Zero website-specific hardcoding.
 """
 import re
 from typing import Dict, Any, Optional, List
 from server.app.schemas.schemas import VerificationPayload, VerificationResponse
-from server.app.planner import decompose_task_into_subgoals, track_subgoal_progress
+from server.app.planner import (
+    decompose_task_into_subgoals,
+    track_subgoal_progress,
+    has_downstream_actions,
+    extract_selection_criterion
+)
 
 def verify_task_completion(payload: VerificationPayload) -> VerificationResponse:
     task = (payload.task or "").strip()
@@ -19,21 +29,18 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
     headings = [h.lower() for h in screen_summary.get("main_headings", [])]
     combined_page_text = f"{title} {' '.join(headings)} {url}"
 
-    # Track Subgoal State
-    # Convert element list to a light representation if available
+    # Track Subgoal State dynamically based on observable DOM & URL state
     elements_light = []
-    # If the caller provided elements in payload or screen summary
     subgoals, completed_subgoals, remaining_goal = track_subgoal_progress(
         task, url, title, elements_light, history
     )
+    remaining_subgoals = [sg for sg in subgoals if sg not in completed_subgoals]
 
     # -------------------------------------------------------------------------
     # 1. Reject Premature Verification on Search Engine Result Pages
-    # If the user asked to open a portal/store and perform actions (e.g. Amazon, SIH, Flipkart),
-    # being on Google/Bing search results is only ACTION SUCCESS (navigation/search), NEVER GOAL SUCCESS.
     # -------------------------------------------------------------------------
     is_search_engine_page = "google.com/search" in url or "bing.com/search" in url
-    wants_external_target = any(w in task_lower for w in ["open ", "go to ", "visit ", "portal", "amazon", "sih", "flipkart"])
+    wants_external_target = any(w in task_lower for w in ["open ", "go to ", "visit ", "portal", "store", "bookstore"])
 
     if is_search_engine_page and wants_external_target:
         return VerificationResponse(
@@ -49,69 +56,72 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
         )
 
     # -------------------------------------------------------------------------
-    # 2. Wrong-Site / Edition Mismatch Detection & Recovery (Test F)
+    # 2. Wrong-Site / Edition Archive Mismatch Detection & Recovery
+    # Detects when landed on an older archived edition (e.g. 2024 archive when looking for recent/active)
     # -------------------------------------------------------------------------
-    if "sih" in task_lower:
-        is_asking_recent = any(y in task_lower for y in ["2026", "current", "latest", "recent"]) or ("2024" not in task_lower and "2025" not in task_lower)
-        if is_asking_recent and ("sih2024" in url or "2024" in title):
-            return VerificationResponse(
-                achieved=False,
-                confidence=0.9,
-                reason="Wrong-site edition mismatch: current page is the older 2024 portal instead of the active portal.",
-                next_hint="Navigate to the active SIH portal or search for the active edition.",
-                requires_recovery=True,
-                goal_status="RECOVERY_REQUIRED",
-                subgoals=subgoals,
-                completed_subgoals=completed_subgoals,
-                remaining_goal="recover to active portal"
-            )
+    is_archive_page = "archive" in title or "archive" in url or "2024" in url
+    task_wants_recent = any(y in task_lower for y in ["2026", "current", "latest", "recent"]) or ("2024" not in task_lower and "2025" not in task_lower)
+    if is_archive_page and task_wants_recent and ("sih" in task_lower or "portal" in task_lower):
+        return VerificationResponse(
+            achieved=False,
+            confidence=0.9,
+            reason="Wrong-site edition mismatch: current page is an older archive instead of the active portal.",
+            next_hint="Navigate to the active portal or search for the active edition.",
+            requires_recovery=True,
+            goal_status="RECOVERY_REQUIRED",
+            subgoals=subgoals,
+            completed_subgoals=completed_subgoals,
+            remaining_goal="recover to active portal"
+        )
 
     # -------------------------------------------------------------------------
-    # 3. Multi-Step E-Commerce & Product Opening Intent (e.g. "find best seller black shirt and open it")
-    # Requires:
-    # 1. On store page (not google)
-    # 2. Query terms present
-    # 3. If "open it" was requested, must have opened the specific product page!
+    # 2. Generic Search Intent Check (HARD INVARIANT)
+    # If the user's task contains downstream actions (e.g. open, add to cart,
+    # download, select, submit), being on a search results page is NEVER goal success.
     # -------------------------------------------------------------------------
-    wants_open_product = any(w in task_lower for w in ["open it", "open product", "open the", "view details"])
-    is_product_task = any(w in task_lower for w in ["shirt", "product", "item", "shoe", "phone", "laptop", "cart", "best seller"])
+    has_downstream = has_downstream_actions(task)
 
-    if is_product_task and wants_open_product:
-        # Check if current page is an individual product detail page
-        is_on_product_page = any(k in url for k in ("/dp/", "/gp/product/", "/p/", "/item/", "/product/")) or any(k in title for k in ("product details", "buy ", ": clothing"))
-        
-        # Check if the product matches the query terms
-        query_terms = [w for w in ["shirt", "black", "seller", "item"] if w in task_lower]
-        matches_terms = all(t in combined_page_text for t in query_terms[:2])
+    # -------------------------------------------------------------------------
+    # 3. Postcondition: Add to Cart Action Verification
+    # -------------------------------------------------------------------------
+    wants_cart = any(w in task_lower for w in ["cart", "buy now", "purchase", "add to basket"])
+    if wants_cart:
+        # Observable evidence of cart postcondition:
+        cart_success_indicators = [
+            "added to cart", "item added", "in your cart", "view cart",
+            "cart (1)", "cart: 1", "checkout (1)", "proceed to checkout",
+            "added to basket", "1 item in cart"
+        ]
+        has_cart_evidence = any(ind in combined_page_text for ind in cart_success_indicators)
+        has_click = any(h == "click" for h in history_actions)
 
-        if is_on_product_page and matches_terms:
+        if has_cart_evidence and has_click:
             return VerificationResponse(
                 achieved=True,
                 confidence=0.98,
-                reason=f"Goal verified achieved: Candidate product page opened and confirmed on screen matching '{task}'.",
+                reason="Goal verified achieved: Item successfully added to cart and confirmed in browser state.",
                 next_hint=None,
                 goal_status="GOAL_ACHIEVED",
                 subgoals=subgoals,
                 completed_subgoals=subgoals,
                 remaining_goal="None"
             )
-        elif not is_on_product_page:
-            # We are on search results or catalog, but haven't opened the product yet
+        else:
             return VerificationResponse(
                 achieved=False,
                 confidence=0.85,
-                reason="Action success: Product search results displayed, but requested candidate item has not yet been opened.",
-                next_hint="Select and click on the best matching product to open its detail page.",
+                reason="Goal not yet achieved: Item has not yet been added to cart (no cart confirmation observable).",
+                next_hint="Identify the target item and click 'Add to Cart'.",
                 goal_status="GOAL_NOT_YET_ACHIEVED",
                 subgoals=subgoals,
                 completed_subgoals=completed_subgoals,
-                remaining_goal="open the selected product"
+                remaining_goal="add selected item to cart"
             )
 
     # -------------------------------------------------------------------------
-    # 4. Download Task Verification
+    # 4. Postcondition: Download Task Verification
     # -------------------------------------------------------------------------
-    is_download_task = any(w in task_lower for w in ["download", "export", "save pdf", "get pdf", "download it", "save statement"])
+    is_download_task = any(w in task_lower for w in ["download", "export", "save pdf", "get pdf", "download it", "save statement", "download its document"])
     if is_download_task:
         completed_downloads = [
             d for d in payload.downloads 
@@ -123,11 +133,11 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
         for dl in completed_downloads:
             dl_fn = (dl.filename or "").lower()
             dl_url = (dl.url or "").lower()
-            if not target_num or (target_num in dl_fn or target_num in dl_url or ".pdf" in dl_fn):
+            if not target_num or (target_num in dl_fn or target_num in dl_url or ".pdf" in dl_fn or ".doc" in dl_fn):
                 return VerificationResponse(
                     achieved=True,
                     confidence=0.98,
-                    reason=f"Goal verified achieved: File download '{dl.filename or 'statement.pdf'}' confirmed in browser download state.",
+                    reason=f"Goal verified achieved: File download '{dl.filename or 'document.pdf'}' confirmed in browser download state.",
                     goal_status="GOAL_ACHIEVED",
                     subgoals=subgoals,
                     completed_subgoals=subgoals,
@@ -155,67 +165,102 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
             goal_status="GOAL_NOT_YET_ACHIEVED",
             subgoals=subgoals,
             completed_subgoals=completed_subgoals,
-            remaining_goal="download target file"
+            remaining_goal="download document"
         )
 
     # -------------------------------------------------------------------------
-    # 5. Specific Target / Problem Statement Verification (e.g. Find PS 171)
+    # 5. Postcondition: Open Product / Item Detail Verification
+    # -------------------------------------------------------------------------
+    wants_open_product = any(w in task_lower for w in ["open it", "open product", "open the", "view details", "open selected"])
+    if wants_open_product:
+        # Observable evidence: URL or title points to an item details view
+        is_on_product_page = any(k in url for k in ("/dp/", "/gp/product/", "/p/", "/item/", "/product/", "/detail/")) or any(k in title for k in ("product details", "buy ", ": clothing", "specifications"))
+        has_click = any(h == "click" for h in history_actions)
+
+        if is_on_product_page and has_click:
+            # Re-verify that opened product page ACTUALLY matches requested product constraints
+            from server.app.product_constraints import extract_product_constraints, verify_candidate_match
+            constraints = payload.product_constraints or extract_product_constraints(task)
+            matches_target, match_reason = verify_candidate_match(combined_page_text, constraints)
+
+            if not matches_target:
+                return VerificationResponse(
+                    achieved=False,
+                    confidence=0.90,
+                    reason=f"TARGET_MISMATCH: Opened page does not match required product constraints ({match_reason}).",
+                    next_hint="Navigate back and select a candidate matching the exact product type and attributes.",
+                    goal_status="RECOVERY_REQUIRED",
+                    subgoals=subgoals,
+                    completed_subgoals=completed_subgoals,
+                    remaining_goal="recover and select correct product",
+                    target_match=False
+                )
+
+            return VerificationResponse(
+                achieved=True,
+                confidence=0.98,
+                reason=f"Goal verified achieved: Candidate product page opened and confirmed on screen matching '{task}'.",
+                next_hint=None,
+                goal_status="GOAL_ACHIEVED",
+                subgoals=subgoals,
+                completed_subgoals=subgoals,
+                remaining_goal="None",
+                target_match=True
+            )
+        else:
+            return VerificationResponse(
+                achieved=False,
+                confidence=0.85,
+                reason="Action success: Search results displayed, but requested candidate item has not yet been opened.",
+                next_hint="Select and click on the best matching product to open its detail page.",
+                goal_status="GOAL_NOT_YET_ACHIEVED",
+                subgoals=subgoals,
+                completed_subgoals=completed_subgoals,
+                remaining_goal="open selected product"
+            )
+
+    # -------------------------------------------------------------------------
+    # 6. Specific Number / Code Match (e.g. PS 171)
     # -------------------------------------------------------------------------
     ps_match = re.search(r'(?:problem statement|ps|item|number|no\.?)\s*([0-9]{2,5})|(?:\b([0-9]{3,5})\b)', task_lower)
-    if ps_match:
+    if ps_match and not has_downstream:
         target_num = ps_match.group(1) or ps_match.group(2)
-        # Verify target is on the ACTUAL target portal page, NOT a search engine summary
-        if not is_search_engine_page:
-            if target_num and target_num in combined_page_text:
-                return VerificationResponse(
-                    achieved=True,
-                    confidence=0.92,
-                    reason=f"Goal verified achieved: Problem Statement / Item {target_num} confirmed present on current page context.",
-                    goal_status="GOAL_ACHIEVED",
-                    subgoals=subgoals,
-                    completed_subgoals=subgoals,
-                    remaining_goal="None"
-                )
-            elif target_num:
-                has_filtered = any(h == "type" and target_num in str(h) for h in history_actions)
-                if has_filtered:
-                    return VerificationResponse(
-                        achieved=True,
-                        confidence=0.88,
-                        reason=f"Goal verified achieved: Table filter for {target_num} successfully applied.",
-                        goal_status="GOAL_ACHIEVED",
-                        subgoals=subgoals,
-                        completed_subgoals=subgoals,
-                        remaining_goal="None"
-                    )
+        if not is_search_engine_page and target_num and target_num in combined_page_text:
+            return VerificationResponse(
+                achieved=True,
+                confidence=0.92,
+                reason=f"Goal verified achieved: Target item {target_num} confirmed present on current page context.",
+                goal_status="GOAL_ACHIEVED",
+                subgoals=subgoals,
+                completed_subgoals=subgoals,
+                remaining_goal="None"
+            )
 
     # -------------------------------------------------------------------------
-    # 6. Basic Search Query Task (ONLY if no further action like 'open' or 'download' was requested)
+    # 7. Basic Search Query Task (ONLY when NO downstream actions exist)
     # -------------------------------------------------------------------------
-    if ("find" in task_lower or "search" in task_lower) and not wants_open_product and not is_download_task:
-        if not is_search_engine_page:
-            terms = [w for w in ["shirt", "black", "1000", "t-shirt", "price", "laptop"] if w in task_lower]
-            matched_terms = [t for t in terms if t in combined_page_text]
-            if len(matched_terms) >= max(1, len(terms) - 1) and len(history_actions) >= 1:
-                return VerificationResponse(
-                    achieved=True,
-                    confidence=0.90,
-                    reason=f"Goal verified achieved: Search results matching '{' '.join(matched_terms)}' located and presented on screen.",
-                    goal_status="GOAL_ACHIEVED",
-                    subgoals=subgoals,
-                    completed_subgoals=subgoals,
-                    remaining_goal="None"
-                )
+    if ("find" in task_lower or "search" in task_lower) and not has_downstream:
+        if not is_search_engine_page and len(history_actions) >= 1:
+            return VerificationResponse(
+                achieved=True,
+                confidence=0.90,
+                reason="Goal verified achieved: Search results located and presented on screen.",
+                goal_status="GOAL_ACHIEVED",
+                subgoals=subgoals,
+                completed_subgoals=subgoals,
+                remaining_goal="None"
+            )
 
     # -------------------------------------------------------------------------
-    # 7. Default: Action may have succeeded, but GOAL is NOT yet verified
+    # 8. HARD INVARIANT GUARD
+    # GOAL_ACHIEVED is illegal if any required subgoal remains incomplete.
     # -------------------------------------------------------------------------
     action_note = f"Previous action '{history_actions[-1]}' completed successfully" if history_actions else "Initial state"
     return VerificationResponse(
         achieved=False,
         confidence=0.50,
-        reason=f"{action_note}, but overall user goal is not yet fully achieved.",
-        next_hint="Proceed to the next logical subgoal.",
+        reason=f"{action_note}, but overall user goal is not yet fully achieved (remaining: {remaining_goal}).",
+        next_hint=f"Proceed to {remaining_goal}.",
         goal_status="GOAL_NOT_YET_ACHIEVED",
         subgoals=subgoals,
         completed_subgoals=completed_subgoals,

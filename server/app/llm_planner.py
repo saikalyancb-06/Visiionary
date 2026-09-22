@@ -282,9 +282,18 @@ def plan_with_local_llm(payload: SanitizedContextPackage) -> Tuple[List[BrowserA
             msg = action_dict.get("question") or action_dict.get("message") or "Confirmation needed."
             actions.append(BrowserAction(type="ask_user", question=msg, url=msg))
         else:
-            actions.append(BrowserAction(type="done"))
+            raise ValueError(f"Unrecognized action type '{action_type}' from LLM.")
 
-        return actions, f"[{active_model}] {reason}", active_model
+        # Fail-Closed Action Validation Gate: Validate all actions deterministically
+        from server.app.validator import validate_action
+        validated_actions = []
+        for a in actions:
+            is_valid, val_act, reason_fail = validate_action(a, payload)
+            if not is_valid:
+                raise ValueError(f"Deterministic Action Validator rejected action '{a.type}': {reason_fail}")
+            validated_actions.append(val_act)
+
+        return validated_actions, f"[{active_model}] {reason}", active_model
 
     except Exception as e:
         raise RuntimeError(f"Local LLM Planning failure: {str(e)}")

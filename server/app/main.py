@@ -178,6 +178,9 @@ def plan_action(payload: SanitizedContextPackage):
         payload.history
     )
 
+    from server.app.product_constraints import extract_product_constraints
+    product_constraints = payload.product_constraints or extract_product_constraints(payload.instruction_sanitized)
+
     # 3. Try Local Ollama LLM first (Priority 1)
     ollama_info = check_ollama_status()
     if ollama_info["available"]:
@@ -189,7 +192,9 @@ def plan_action(payload: SanitizedContextPackage):
                 actions=actions,
                 subgoals=subgoals,
                 completed_subgoals=completed_subgoals,
-                remaining_goal=remaining_goal
+                remaining_goal=remaining_goal,
+                product_constraints=product_constraints,
+                selected_target=payload.selected_target
             )
         except Exception as e:
             print(f"[SERVER] Local Ollama call warning ({e}), falling back to local semantic planner...")
@@ -202,7 +207,9 @@ def plan_action(payload: SanitizedContextPackage):
         actions=actions,
         subgoals=subgoals,
         completed_subgoals=completed_subgoals,
-        remaining_goal=remaining_goal
+        remaining_goal=remaining_goal,
+        product_constraints=product_constraints,
+        selected_target=payload.selected_target
     )
 
 from server.app.schemas.schemas import VerificationPayload, VerificationResponse
