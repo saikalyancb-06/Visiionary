@@ -14,8 +14,16 @@ export default function Header() {
           onClick={() => scrollTo('hero')}
           className="flex items-center gap-2 cursor-pointer mr-1"
         >
-          <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-[0_0_10px_rgba(59,130,246,0.6)]">
-            <span className="text-[11px] font-black text-white">V</span>
+          <div className="w-6 h-6 flex items-center justify-center text-[#0084ff] drop-shadow-[0_0_8px_rgba(0,132,255,0.7)]">
+            <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
+              <path d="M 8 22 V 12 C 8 9.8 9.8 8 12 8 H 22" stroke="#0084FF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M 42 8 H 52 C 54.2 8 56 9.8 56 12 V 22" stroke="#0084FF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M 56 42 V 52 C 56 54.2 54.2 56 52 56 H 42" stroke="#0084FF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M 22 56 H 12 C 9.8 56 8 54.2 8 52 V 42" stroke="#0084FF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M 14 32 C 20 20 44 20 50 32 C 44 44 20 44 14 32 Z" fill="#0084FF"/>
+              <circle cx="32" cy="32" r="7.5" fill="#FFFFFF"/>
+              <circle cx="32" cy="32" r="3.8" fill="#0084FF"/>
+            </svg>
           </div>
           <span className="text-xs font-bold text-white tracking-tight hidden sm:inline">Visiionary</span>
         </div>
