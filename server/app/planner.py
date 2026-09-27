@@ -31,13 +31,25 @@ def has_downstream_actions(task: str) -> bool:
     """
     t_clean = normalize(task)
     downstream_patterns = [
-        r'\b(open\s+it|open\s+product|open\s+the|open\s+selected|open\s+item|view\s+details)\b',
+        r'\b(open\s+it|open\s+product|open\s+the\s+selected|open\s+the\s+item|open\s+selected|view\s+details)\b',
         r'\b(add\s+to\s+cart|add\s+it\s+to\s+cart|add\s+to\s+basket|add\s+item|cart|buy|purchase)\b',
         r'\b(download|export|save\s+pdf|get\s+pdf|save\s+document)\b',
         r'\b(submit|apply|confirm|book|reserve|checkout|proceed)\b',
-        r'\b(select|choose|pick)\b'
+        r'\b(select\s+the\s+result|select\s+the\s+best|choose\s+the\s+best|pick\s+the\s+best|select\s+the\s+cheapest)\b'
     ]
-    return any(re.search(p, t_clean) for p in downstream_patterns)
+    if any(re.search(p, t_clean) for p in downstream_patterns):
+        return True
+
+    # If the user task specifies a concrete product entity or attributes,
+    # finding is not just a query - selecting/opening the item is required downstream.
+    from server.app.product_constraints import extract_product_constraints
+    pc = extract_product_constraints(task)
+    if pc.get("product_type") or pc.get("attributes"):
+        pt = pc.get("product_type", "")
+        if pt and not any(k in pt for k in ("portal", "website", "sih", "page", "statement", "query", "score", "scores", "event", "results")):
+            return True
+
+    return False
 
 def decompose_task_into_subgoals(task: str) -> List[str]:
     """
@@ -51,8 +63,8 @@ def decompose_task_into_subgoals(task: str) -> List[str]:
     task_clean = task.strip().rstrip('.')
     task_lower = normalize(task_clean)
 
-    # 1. Navigation / Site access
-    nav_match = re.search(r'(?:open|go to|navigate to|visit)\s+([a-zA-Z0-9\s._-]+?)(?:\s+(?:and|then|to)\s+|$)', task_clean, re.I)
+    # 1. Navigation / Site access (requires conjunction like 'and' or 'then' before further actions)
+    nav_match = re.search(r'(?:open|go to|navigate to|visit)\s+([a-zA-Z0-9\s._-]+?)(?:\s+(?:and|then|to)\s+)', task_clean, re.I)
     if nav_match:
         site_target = nav_match.group(1).strip()
         subgoals.append(f"reach {site_target}")
@@ -68,11 +80,17 @@ def decompose_task_into_subgoals(task: str) -> List[str]:
     if criterion:
         crit_name, disp = criterion
         subgoals.append(f"identify {disp} item")
-    elif re.search(r'\b(?:problem statement|ps)\s*([0-9]{2,5})\b', task_clean, re.I):
-        m = re.search(r'\b(?:problem statement|ps)\s*([0-9]{2,5})\b', task_clean, re.I)
+    elif re.search(r'\b(?:problem statement|ps)\s*(?:no\.?|id|#)?\s*([0-9]{2,5})\b', task_clean, re.I):
+        m = re.search(r'\b(?:problem statement|ps)\s*(?:no\.?|id|#)?\s*([0-9]{2,5})\b', task_clean, re.I)
         subgoals.append(f"locate problem statement {m.group(1)}")
     elif any(w in task_lower for w in ("select the result", "choose the result", "identify the result")):
         subgoals.append("identify target item")
+    else:
+        from server.app.product_constraints import extract_product_constraints
+        pc = extract_product_constraints(task_clean)
+        if pc.get("product_type") or pc.get("attributes"):
+            pt_label = pc.get("product_type") or "target product"
+            subgoals.append(f"identify {pt_label}")
 
     # 4. Action execution (open product, add to cart, download file, submit)
     if re.search(r'\b(?:open it|open product|open the selected|open the item|view details)\b', task_clean, re.I):
@@ -83,9 +101,11 @@ def decompose_task_into_subgoals(task: str) -> List[str]:
         subgoals.append("download document")
     elif re.search(r'\b(?:submit|apply|book|checkout)\b', task_clean, re.I):
         subgoals.append("submit form")
+    elif any(sg.startswith("identify ") for sg in subgoals) and not any(w in task_lower for w in ("find ", "search ", "look for ", "portal", "website", "sih", "score", "scores", "event", "results")):
+        subgoals.append("open selected product")
 
     if not subgoals:
-        subgoals = [f"execute {task_clean}"]
+        subgoals = [task_clean if task_clean.lower().startswith(('open ', 'reach ', 'view ', 'find ', 'search ')) else f"open {task_clean}"]
     return subgoals
 
 def track_subgoal_progress(task: str, current_url: str, page_title: str, elements: List[ElementMetadata], history: List[dict]) -> Tuple[List[str], List[str], str]:
@@ -113,25 +133,25 @@ def track_subgoal_progress(task: str, current_url: str, page_title: str, element
             if (has_typed and any(w in page_text for w in query_words)) or (len(history_actions) >= 2 and any(w in page_text for w in query_words)):
                 completed.append(sg)
         elif sg_l.startswith("identify "):
-            # Strict Invariant: TARGET_IDENTIFIED == true ONLY IF candidate satisfies ALL hard constraints.
-            # Action count is NOT evidence of semantic success.
-            from server.app.product_constraints import extract_product_constraints, verify_candidate_match, verify_selection_criterion_evidence
+            # Strict Invariant: TARGET_IDENTIFIED == true ONLY IF candidate entity satisfies ALL hard constraints.
+            # RAW DOM ELEMENT != PRODUCT. Must aggregate evidence into ProductCandidate entities first.
+            from server.app.product_constraints import extract_product_constraints, verify_selection_criterion_evidence
+            from server.app.candidate_extractor import extract_product_candidates, verify_product_candidate_match
             constraints = extract_product_constraints(task)
             
-            # Look for a candidate on page that satisfies ALL required hard constraints
+            # Aggregate raw elements into structured product candidates
+            product_candidates = extract_product_candidates(elements, page_title or "", current_url or "")
             matching_candidate = None
-            for e in elements:
-                if e.role in ("a", "link", "h2", "h3", "div", "button") and len(e.label.strip()) > 3:
-                    ok_cand, _ = verify_candidate_match(e.label, constraints)
-                    if ok_cand:
-                        matching_candidate = e
-                        break
+            for pc in product_candidates:
+                ok_cand, _ = verify_product_candidate_match(pc, constraints)
+                if ok_cand:
+                    matching_candidate = pc
+                    break
 
             if matching_candidate:
                 crit = constraints.get("selection_criterion")
                 if crit:
-                    # Selection criterion requires observable evidence (e.g. badge / label)
-                    has_ev, _ = verify_selection_criterion_evidence(matching_candidate.label, constraints)
+                    has_ev, _ = verify_selection_criterion_evidence(matching_candidate, constraints)
                     if has_ev:
                         completed.append(sg)
                 else:
@@ -169,17 +189,36 @@ def clean_site_query(query: str) -> str:
     return cleaned
 
 def extract_search_terms(task: str) -> List[str]:
-    # Extract candidate query terms from task: e.g. "search for laptop", "find black shoes"
-    m = re.search(r'(?:search for|find|search|look for|query)\s+["\']?([^"\']+)["\']?', task, re.IGNORECASE)
+    # Extract candidate query terms from task: e.g. "search for laptop", "find best selling black shirt for men"
+    t = (task or "").strip()
+    # Strip any parenthetical notes/recovery hints
+    t = re.sub(r'\s*\([^)]*\)', '', t).strip()
+    # Strip conversational prefixes: "can you find me a", "could you please search for"
+    t_clean = re.sub(r'^(?:can\s+you\s+(?:please\s+)?|could\s+you\s+(?:please\s+)?|please\s+|i\s+(?:want|need)\s+(?:you\s+to\s+)?|help\s+me\s+(?:to\s+)?|kindly\s+)', '', t, flags=re.IGNORECASE)
+    # Strip leading navigation site: "open sih portal and", "go to amazon and"
+    t_clean = re.sub(r'^(?:open|go\s+to|navigate\s+to|visit)\s+[a-zA-Z0-9\s._-]+?\s+(?:and|then)\s+', '', t_clean, flags=re.IGNORECASE)
+    # Strip site mentions: "in flipkart", "on amazon"
+    t_clean = re.sub(r'\b(?:in|on|at|from)\s+(?:flipkart|amazon|myntra|ebay|walmart|target|etsy|aliexpress|bestbuy|ajio|meesho|google|bing)\b.*$', '', t_clean, flags=re.IGNORECASE)
+    # Strip trailing condition clauses: ", it should...", "it shou..."
+    t_clean = re.sub(r'[,;]?\s*\b(?:it\s+shou\w*|it\s+should|it\s+must|it\s+needs\s+to|make\s+sure|which\s+should|having)\b.*$', '', t_clean, flags=re.IGNORECASE)
+
+    # Check for specific problem statement or item ID: e.g. "find me ps no.143" -> extract "143"
+    ps_m = re.search(r'\b(?:problem statement|ps)\s*(?:no\.?|id|#)?\s*([0-9]{2,6})\b', t_clean, re.I)
+    if ps_m:
+        return [ps_m.group(1)]
+
+    m = re.search(r'(?:search for\s+a|search for|find\s+me\s+a|find\s+me|find\s+a|find|search|look for\s+a|look for|query|get\s+me\s+a|get\s+me|get)\s+["\']?([^"\']+)["\']?', t_clean, re.IGNORECASE)
     if m:
         query = m.group(1).strip()
         # strip trailing directives like "and open it", "and add to cart", "inside that website"
         query = re.sub(r'\s+(?:inside|in|on)\s+(?:that|the|this)?\s*(?:website|portal|page|site|store|app).*$', '', query, flags=re.IGNORECASE)
         query = re.sub(r'\s+(?:and\s+.*|on\s+.*)$', '', query, flags=re.IGNORECASE)
-        # strip leading superlatives if user said "find the best seller black shirt" -> "black shirt"
-        query_cleaned = re.sub(r'\b(the\s+)?(best\s*sell(?:er|ing)|highest\s*rated|top\s*rated|cheapest)\s*', '', query, flags=re.IGNORECASE).strip()
+        # strip leading superlatives if user said "find the best seller black shirt for men" -> "black shirt for men"
+        query_cleaned = re.sub(r'^\s*(?:the\s+)?(?:best\s*sell(?:er|ing)|highest\s*rated|top\s*rated|cheapest)\s+', '', query, flags=re.IGNORECASE).strip()
+        query_cleaned = re.sub(r'\b(?:in|on|at)\s+(?:flipkart|amazon|myntra|ebay|walmart|target|etsy|aliexpress|bestbuy|ajio|meesho)\b', '', query_cleaned, flags=re.IGNORECASE).strip()
         return [query_cleaned or query]
     return []
+
 
 def score_element_for_action(el: ElementMetadata, keywords: List[str], preferred_roles: List[str]) -> float:
     score = 0.0
@@ -205,7 +244,7 @@ def score_element_for_action(el: ElementMetadata, keywords: List[str], preferred
 
     return score
 
-def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAction], str]:
+def _decide_next_action_core(payload: SanitizedContextPackage) -> Tuple[List[BrowserAction], str]:
     task = payload.instruction_sanitized
     task_lower = normalize(task)
     history = payload.history or []
@@ -227,23 +266,88 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
             if blocked_element_id:
                 elements = [el for el in elements if el.id != blocked_element_id]
 
+    # -----------------------------------------------------------------------
+    # Reconstruct dependency-aware task execution state & classify page semantics
+    # -----------------------------------------------------------------------
+    from server.app.task_state_machine import (
+        reconstruct_state, save_state, parse_task_requirements,
+        get_legal_transitions, evaluate_phase_prerequisites, get_blocked_diagnostic,
+        PHASE_DISCOVER, PHASE_SEARCH, PHASE_EXTRACT_ENTITIES, PHASE_ACCUMULATE,
+        PHASE_COMPARE, PHASE_SELECT_TARGET, PHASE_OPEN_TARGET, PHASE_VERIFY_TARGET_PAGE,
+        PHASE_EXTRACT_INFORMATION, PHASE_GOAL_ACHIEVED,
+    )
+    from server.app.page_model import (
+        classify_page_semantics,
+        PAGE_SEARCH_DISCOVERY, PAGE_LISTING_CATALOG, PAGE_DETAIL_ENTITY,
+        PAGE_TRANSACTION_CART, PAGE_CONFIRMATION_RESULT, PAGE_AUTHENTICATION,
+        PAGE_FORM_INTERACTION, PAGE_DASHBOARD_TABLE, PAGE_NAVIGATION_INTERMEDIATE,
+        PAGE_ARTICLE_DOCUMENT, PAGE_UNKNOWN,
+    )
+
+    page_semantics = classify_page_semantics(
+        elements=elements,
+        page_title=payload.page.title_sanitized or '',
+        current_url=payload.page.url_sanitized or '',
+    )
+
+    task_state = reconstruct_state(
+        payload.verification_state,
+        payload.selected_target,
+        getattr(payload, 'task_execution_state', None),
+    )
+    task_reqs = parse_task_requirements(task)
+    # Hydrate state with task requirements (first call bootstraps count/flags)
+    if task_state.required_candidate_count == 1 and task_reqs["required_candidate_count"] > 1:
+        task_state.required_candidate_count = task_reqs["required_candidate_count"]
+    if not task_state.requires_comparison and task_reqs["requires_comparison"]:
+        task_state.requires_comparison = task_reqs["requires_comparison"]
+    if not task_state.requires_information_extraction and task_reqs["requires_information_extraction"]:
+        task_state.requires_information_extraction = task_reqs["requires_information_extraction"]
+        task_state.information_fields_requested = task_reqs["information_fields_requested"]
+
+    legal_phases = get_legal_transitions(task_state)
+
+    # -----------------------------------------------------------------------
     # 0. Universal Navigation Intent: "open X", "go to X", "navigate to X"
+    #    GUARD: Skip if the captured target is a deictic/relative reference
+    #           (it, its, this, that, the selected, product page, etc.)
+    #           Such phrases refer to a previously-selected entity, not a site.
+    # -----------------------------------------------------------------------
+    # Deictic pronouns and relative-reference words that are NOT concrete nav targets
+    DEICTIC_REFERENCES = {
+        "it", "its", "them", "their", "this", "that", "these", "those",
+        "selected", "chosen", "picked", "result", "page",
+    }
+
     nav_match = re.search(r'(?:open|go to|navigate to|visit)\s+([a-zA-Z0-9\s._/:-]+)', task_lower)
     clean_name = ""
     target_name = ""
     if nav_match:
         raw_query = nav_match.group(1).strip()
-        # Clean query: strip words like "portal", "website", "the", "and search...", etc.
         clean_name = re.sub(r'^(the|a|an)\s+', '', raw_query, flags=re.IGNORECASE).strip()
         clean_name = re.sub(r'\s+(and|then|to|for)\s+.*$', '', clean_name, flags=re.IGNORECASE).strip()
         target_name = re.sub(r'\b(portal|website|page|site|webpage|online|it|them|item)\b', '', clean_name, flags=re.IGNORECASE).strip()
-        if target_name in ("", "it", "them", "item", "this", "that"):
+
+        # Check for deictic/relative references — these are downstream actions, not nav targets
+        target_tokens = re.split(r'[^a-zA-Z]+', target_name.lower())
+        target_tokens = [t for t in target_tokens if t]
+        is_deictic = (
+            target_name in ("", "it", "them", "item", "this", "that")
+            or any(tok in DEICTIC_REFERENCES for tok in target_tokens)
+        )
+        if is_deictic:
             nav_match = None
 
 
     has_navigated = any(h == "navigate" for h in history_actions)
     curr_url = (payload.page.url_sanitized or '').lower()
-    is_on_search = "google.com/search" in curr_url or "bing.com/search" in curr_url
+    is_on_search_engine = (
+        "google.com/search" in curr_url
+        or "bing.com/search" in curr_url
+        or "duckduckgo.com" in curr_url
+        or "search.yahoo.com" in curr_url
+    )
+    is_on_search = is_on_search_engine or ("search" in curr_url and ("q=" in curr_url or "query=" in curr_url)) or "/?q=" in curr_url
 
     if nav_match and not has_navigated and not is_on_search:
         target_url = None
@@ -262,9 +366,15 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
     if not elements:
         return [BrowserAction(type="done")], "No actionable interactive elements detected on page."
 
-    # Autonomous Search Engine Result Selection: automatically enter top result link matching destination identity
-    curr_url = (payload.page.url_sanitized or '').lower()
-    if "google.com/search" in curr_url or "bing.com/search" in curr_url:
+    # Autonomous Search Engine Result / Intermediate Destination Selection
+    # When on an external search engine (Google, Bing, DuckDuckGo), evaluate organic destination links to enter target portal
+    nav_target = clean_name or target_name or ""
+    if is_on_search_engine:
+        target_already_reached = False
+    else:
+        target_already_reached = bool(nav_target and len(nav_target) > 2 and nav_target.lower() in curr_url)
+
+    if is_on_search_engine and not target_already_reached:
         skip_labels = {"all", "images", "videos", "news", "maps", "more", "tools", "sign in", "settings", "privacy", "terms", "feedback", "next"}
         result_links = [
             el for el in elements 
@@ -276,11 +386,8 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
         ]
         if result_links:
             import urllib.parse
-            target_match_links = []
-            
-            # Determine destination identity tokens from task / navigation target
-            nav_target = clean_name or target_name or ""
             target_tokens = [t.lower() for t in re.split(r'[^a-zA-Z0-9]+', nav_target) if len(t) > 2]
+            target_match_links = []
 
             for el in result_links:
                 label_lower = el.label.lower()
@@ -316,33 +423,70 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
                 if matched_identity:
                     target_match_links.append(el)
 
-            if target_match_links:
-                best_link = target_match_links[0]
-                if best_link.href and (best_link.href.startswith("http://") or best_link.href.startswith("https://")):
-                    return [
-                        BrowserAction(type="open_link", target=ActionTarget(element_id=best_link.id), url=best_link.href),
-                        BrowserAction(type="wait", milliseconds=500)
-                    ], f"Autonomously navigating via verified destination link '{best_link.label}' -> {best_link.href}."
+            # If user explicitly specified a navigation target, match by identity or emit NO_RELEVANT_CANDIDATE
+            if nav_target:
+                if target_match_links:
+                    best_link = target_match_links[0]
+                    if best_link.href and (best_link.href.startswith("http://") or best_link.href.startswith("https://")):
+                        return [
+                            BrowserAction(type="open_link", target=ActionTarget(element_id=best_link.id), url=best_link.href),
+                            BrowserAction(type="wait", milliseconds=500)
+                        ], f"Autonomously navigating via verified destination link '{best_link.label}' -> {best_link.href}."
 
-                return [
-                    BrowserAction(type="click", target=ActionTarget(element_id=best_link.id)),
-                    BrowserAction(type="wait", milliseconds=500)
-                ], f"Autonomously selected verified organic search result: '{best_link.label}'."
-            else:
-                # Structured NO_RELEVANT_CANDIDATE: Do NOT blindly click the first unrelated result!
-                return [
-                    BrowserAction(type="scroll", direction="down", amount=500),
-                    BrowserAction(type="wait", milliseconds=500)
-                ], f"NO_RELEVANT_CANDIDATE: No search results matched destination '{nav_target}' by identity. Scrolling to inspect more candidates."
+                    return [
+                        BrowserAction(type="click", target=ActionTarget(element_id=best_link.id)),
+                        BrowserAction(type="wait", milliseconds=500)
+                    ], f"Autonomously selected verified organic search result: '{best_link.label}'."
+                else:
+                    return [
+                        BrowserAction(type="scroll", direction="down", amount=500),
+                        BrowserAction(type="wait", milliseconds=500)
+                    ], f"NO_RELEVANT_CANDIDATE: No search results matched destination '{nav_target}' by identity. Scrolling to inspect more candidates."
+
+            # For pure product/discovery search tasks without a named navigation target:
+            # Select the most relevant organic discovery destination matching task keywords
+            elif result_links:
+                task_tokens = [t.lower() for t in re.split(r'[^a-zA-Z0-9]+', task_lower) if len(t) > 2 and t not in ('find', 'search', 'with', 'least', 'under', 'from', 'best', 'more', 'flipkart', 'amazon', 'store', 'portal', 'site', 'website')]
+                scored_links = []
+                for el in result_links:
+                    # Ignore links staying within search engine
+                    if el.href and any(s in el.href.lower() for s in ('duckduckgo.com', 'google.com', 'bing.com')) and ('q=' in el.href or 'search' in el.href):
+                        continue
+                    l_text = f"{el.label} {el.href or ''}".lower()
+                    overlap = sum(1 for tok in task_tokens if tok in l_text)
+                    if overlap > 0:
+                        scored_links.append((el, overlap))
+
+                scored_links.sort(key=lambda x: x[1], reverse=True)
+                if scored_links:
+                    top_link = scored_links[0][0]
+                    if top_link.href and (top_link.href.startswith("http://") or top_link.href.startswith("https://")):
+                        return [
+                            BrowserAction(type="open_link", target=ActionTarget(element_id=top_link.id), url=top_link.href),
+                            BrowserAction(type="wait", milliseconds=500)
+                        ], f"Transitioning from SEARCH_DISCOVERY to organic destination '{top_link.label}' -> {top_link.href}."
+                    return [
+                        BrowserAction(type="click", target=ActionTarget(element_id=top_link.id)),
+                        BrowserAction(type="wait", milliseconds=500)
+                    ], f"Transitioning from SEARCH_DISCOVERY to organic destination '{top_link.label}'."
 
     # 1. General Search Intent: "search for X", "find X", etc.
+    # Inhibit typing when already on populated search results / discovery page
     search_terms = extract_search_terms(task)
     query_text = search_terms[0] if search_terms else ""
-
-    # Check if we have already typed into a search box in this session
     has_typed = any(h == "type" for h in history_actions)
 
-    if query_text and not has_typed:
+    curr_url_clean = curr_url.lower()
+    url_has_query = any(w in curr_url_clean for w in query_text.lower().split() if len(w) > 2) if query_text else False
+    is_already_populated_search = (
+        ("search" in curr_url_clean or "results" in (payload.page.title_sanitized or '').lower() or "/search" in curr_url_clean)
+        and (url_has_query or has_typed)
+        and len([el for el in elements if el.role in ("a", "link") and len(el.label.strip()) > 3]) >= 2
+    )
+
+    # When on a store page and downstream items require search:
+    if query_text and not has_typed and not is_already_populated_search:
+
         # Find the best editable search input
         inputs = [el for el in elements if el.role in ("input", "textarea") and el.sensitivity != "redacted"]
         best_input = None
@@ -461,34 +605,174 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
 
     # If looking to select or open target item and NOT yet on the confirmed product page:
     if (constraints.get("requested_action") or req_pt) and not is_product_page:
-        # Step 1: Filter candidate elements strictly by HARD CONSTRAINTS (product_type and attributes)
-        candidate_elements = [
-            el for el in elements 
-            if el.role in ("a", "link", "h2", "h3", "div", "button") 
-            and len(el.label.strip()) > 3
-            and not any(x in el.label.lower() for x in ("filter", "sort", "next", "customer review", "sign in", "cart", "deals", "privacy", "help"))
-        ]
+        from server.app.candidate_extractor import (
+            extract_product_candidates,
+            verify_product_candidate_match,
+            rank_product_candidates,
+            print_candidate_diagnostics
+        )
+
+        # Step 1: Aggregate raw DOM/accessibility elements into structured ProductCandidate entities
+        product_candidates = extract_product_candidates(
+            elements,
+            payload.page.title_sanitized or '',
+            curr_url
+        )
 
         valid_candidates = []
-        for el in candidate_elements:
-            matches, _ = verify_candidate_match(el.label, constraints)
+        rejected_candidates = []
+
+        for cand in product_candidates:
+            matches, reason = verify_product_candidate_match(cand, constraints)
             if matches:
-                valid_candidates.append(el)
+                valid_candidates.append(cand)
+            else:
+                rejected_candidates.append((cand, reason))
 
         # Step 2: Rank valid candidates by selection criteria (BEST_SELLING, HIGHEST_RATED, etc.)
         if valid_candidates:
-            ranked = rank_candidates_by_criteria(valid_candidates, constraints)
-            chosen_target = ranked[0][0]
+            ranked = rank_product_candidates(valid_candidates, constraints)
+
+            # ---------------------------------------------------------------
+            # STATE MACHINE GATE: Candidate Accumulation
+            # For compare tasks, accumulate candidates until required count is
+            # met. Do NOT dispatch OPEN_TARGET until SELECT_TARGET is legal.
+            # ---------------------------------------------------------------
+            if task_state.requires_comparison or task_state.required_candidate_count > 1:
+                # Merge new candidates into verified_candidates (dedup by title)
+                existing_titles = {c.get("title", "").lower() for c in task_state.verified_candidates}
+                for rc, *rest in ranked:
+                    rc_title = (rc.title or "").lower()
+                    if rc_title not in existing_titles:
+                        task_state.verified_candidates.append(rc.to_dict())
+                        existing_titles.add(rc_title)
+
+                have = len(task_state.verified_candidates)
+                need = task_state.required_candidate_count
+                print_candidate_diagnostics(
+                    all_candidates=product_candidates,
+                    valid_candidates=valid_candidates,
+                    rejected_candidates=rejected_candidates,
+                )
+                print(f"[ACCUMULATE] {have}/{need} verified candidates collected.")
+
+                if have < need:
+                    # Not enough candidates yet â€” scroll to find more
+                    task_state.phase = PHASE_ACCUMULATE
+                    save_state(task_state, payload)
+                    return [
+                        BrowserAction(type="scroll", direction="down", amount=500),
+                        BrowserAction(type="wait", milliseconds=500),
+                    ], (
+                        f"ACCUMULATE_CANDIDATES: {have}/{need} verified candidates so far. "
+                        f"Scrolling to discover more matching candidates."
+                    )
+
+                # Enough candidates â€” select best among accumulated set
+                # Re-rank all accumulated candidates (they are stored as dicts)
+                # For now select first (ranking over dicts requires reconstruction)
+                # TODO: full ranking over accumulated set when candidate_extractor supports it
+                chosen_dict = task_state.verified_candidates[0]
+                task_state.selected_target = chosen_dict
+                task_state.phase = PHASE_SELECT_TARGET
+                payload.selected_target = chosen_dict
+                save_state(task_state, payload)
+
+                chosen_href = chosen_dict.get("href") or chosen_dict.get("url") or ""
+                chosen_title = chosen_dict.get("title", "")[:50]
+
+                # -------------------------------------------------------
+                # OPEN_TARGET gate
+                # -------------------------------------------------------
+                ok_open, missing_open = evaluate_phase_prerequisites(PHASE_OPEN_TARGET, task_state)
+                if not ok_open:
+                    print(get_blocked_diagnostic(PHASE_OPEN_TARGET, task_state))
+                    return [
+                        BrowserAction(type="scroll", direction="down", amount=400),
+                        BrowserAction(type="wait", milliseconds=400),
+                    ], "[PLANNER_BLOCKED] OPEN_TARGET prerequisites not satisfied. Continuing discovery."
+
+                if chosen_href and chosen_href.startswith(("http://", "https://")):
+                    task_state.phase = PHASE_OPEN_TARGET
+                    save_state(task_state, payload)
+                    return [
+                        BrowserAction(type="open_link", target=ActionTarget(element_id=None), url=chosen_href),
+                        BrowserAction(type="wait", milliseconds=500),
+                    ], f"COMPARE+SELECT: {have}/{need} candidates. Selected '{chosen_title}'. Navigating to product page."
+
+                # No href â€” scroll for more context
+                save_state(task_state, payload)
+                return [
+                    BrowserAction(type="scroll", direction="down", amount=400),
+                    BrowserAction(type="wait", milliseconds=400),
+                ], f"COMPARE+SELECT: Selected '{chosen_title}' but destination href unavailable. Scrolling."
+
+            # Non-compare path: single-entity selection
+            chosen_candidate = ranked[0][0]
+
+            # ---------------------------------------------------------------
+            # OPEN_TARGET gate for non-compare path
+            # ---------------------------------------------------------------
+            # Save selected target into state before checking prerequisites
+            payload.selected_target = chosen_candidate.to_dict()
+            task_state.selected_target = chosen_candidate.to_dict()
+            task_state.phase = PHASE_SELECT_TARGET
+
+            ok_open, missing_open = evaluate_phase_prerequisites(PHASE_OPEN_TARGET, task_state)
+            if not ok_open:
+                print(get_blocked_diagnostic(PHASE_OPEN_TARGET, task_state))
+                save_state(task_state, payload)
+                return [
+                    BrowserAction(type="scroll", direction="down", amount=400),
+                    BrowserAction(type="wait", milliseconds=400),
+                ], "[PLANNER_BLOCKED] OPEN_TARGET prerequisites not satisfied after selection. Continuing discovery."
+
+            # Diagnostic tracing
+            print_candidate_diagnostics(
+                all_candidates=product_candidates,
+                valid_candidates=valid_candidates,
+                rejected_candidates=rejected_candidates,
+                selected_target=chosen_candidate
+            )
+
+            # Choose the primary actionable element from the candidate's source elements
+            target_el_id = None
+            for sid in chosen_candidate.source_element_ids:
+                cand_el = next((e for e in elements if e.id == sid), None)
+                if cand_el and cand_el.role in ("a", "link", "button", "h2", "h3", "div") and cand_el.interactable:
+                    target_el_id = sid
+                    break
+            if not target_el_id and chosen_candidate.source_element_ids:
+                target_el_id = chosen_candidate.source_element_ids[0]
+
+            task_state.phase = PHASE_OPEN_TARGET
+            save_state(task_state, payload)
+
+            if chosen_candidate.href and (chosen_candidate.href.startswith("http://") or chosen_candidate.href.startswith("https://")):
+                return [
+                    BrowserAction(type="open_link", target=ActionTarget(element_id=target_el_id), url=chosen_candidate.href),
+                    BrowserAction(type="wait", milliseconds=500)
+                ], f"Selected product candidate '{chosen_candidate.title[:50]}' (id={chosen_candidate.candidate_id}) matching all hard constraints. Navigating to product page."
+
             return [
-                BrowserAction(type="click", target=ActionTarget(element_id=chosen_target.id)),
+                BrowserAction(type="click", target=ActionTarget(element_id=target_el_id)),
                 BrowserAction(type="wait", milliseconds=500)
-            ], f"Selected target satisfying all hard constraints ({req_pt}, {constraints.get('attributes')}): '{chosen_target.label[:50]}'."
+            ], f"Selected product candidate '{chosen_candidate.title[:50]}' (id={chosen_candidate.candidate_id}) matching all hard constraints."
+
         elif req_pt:
+            # Print rejection diagnostics when no candidates qualify
+            print_candidate_diagnostics(
+                all_candidates=product_candidates,
+                valid_candidates=[],
+                rejected_candidates=rejected_candidates
+            )
             # HARD CONSTRAINT FAILURE: Never select a wrong product just to make progress!
+            save_state(task_state, payload)
             return [
                 BrowserAction(type="scroll", direction="down", amount=500),
                 BrowserAction(type="wait", milliseconds=500)
             ], f"NO_VALID_TARGET_FOUND: No candidates on screen satisfied required product type '{req_pt}' and attributes {constraints.get('attributes')}. Scrolling to inspect more."
+
 
     # 4. Add to Cart / Shopping Intent (Operates strictly on the selected item or product detail page)
     if any(k in task_lower for k in ("cart", "buy", "purchase", "add")):
@@ -554,14 +838,76 @@ def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAc
 
     # 9. Fallback: For semantic product/item tasks, NEVER select an arbitrary candidate or click elements[0]
     if req_pt or constraints.get("requested_action"):
+        save_state(task_state, payload)
         return [
             BrowserAction(type="scroll", direction="down", amount=400),
             BrowserAction(type="wait", milliseconds=400)
         ], "NO_VALID_CANDIDATE: No interactive elements satisfied semantic task requirements. Scrolling to inspect more candidates."
 
+    save_state(task_state, payload)
     if history_actions:
         return [BrowserAction(type="wait", milliseconds=300)], "Action completed; yielding to independent goal verifier."
-    
+
     return [
         BrowserAction(type="wait", milliseconds=500)
     ], "Awaiting clear actionable candidate matching task criteria."
+
+
+def decide_next_action(payload: SanitizedContextPackage) -> Tuple[List[BrowserAction], str]:
+    from server.app.page_model import classify_page_semantics, PAGE_SEARCH_DISCOVERY
+    from server.app.task_state_machine import (
+        reconstruct_state, parse_task_requirements, evaluate_phase_prerequisites
+    )
+    from server.app.candidate_extractor import extract_product_candidates, verify_product_candidate_match
+
+    task = payload.instruction_sanitized
+    curr_url = payload.page.url_sanitized or ''
+    elements = [el for el in payload.elements if el.interactable and el.sensitivity != "sensitive_raw"]
+    page_semantics = classify_page_semantics(
+        elements=elements,
+        page_title=payload.page.title_sanitized or '',
+        current_url=curr_url,
+    )
+    task_state = reconstruct_state(payload.verification_state, payload.selected_target, getattr(payload, 'task_execution_state', None))
+
+    # Relevant destinations
+    skip_labels = {"all", "images", "videos", "news", "maps", "more", "tools", "sign in", "settings", "privacy", "terms", "feedback", "next"}
+    candidate_destinations = [
+        el for el in elements 
+        if el.role in ("a", "link") 
+        and len(el.label.strip()) > 3 
+        and normalize(el.label) not in skip_labels
+    ]
+
+    # Available product candidates on current page
+    extracted_candidates = extract_product_candidates(elements, payload.page.title_sanitized or '', curr_url)
+
+    # Next predicate
+    ok_phase, missing_preds = evaluate_phase_prerequisites(task_state.phase, task_state)
+    next_predicate = f"{task_state.phase} (Prerequisites missing: {missing_preds})" if missing_preds else f"{task_state.phase} (Prerequisites SATISFIED)"
+
+    # Execute core decision
+    actions, summary = _decide_next_action_core(payload)
+
+    # Diagnostic output
+    selected_act_str = f"{actions[0].type} target={actions[0].target.element_id if actions[0].target else None} url={actions[0].url}" if actions else "None"
+    try:
+        print("\n" + "="*60)
+        print("PLANNER DECISION DIAGNOSTIC")
+        print("="*60)
+        print(f"1. CURRENT PAGE TYPE:             {page_semantics.semantic_state} (confidence={page_semantics.confidence})")
+        print(f"2. AVAILABLE RELEVANT DESTINATIONS: {len(candidate_destinations)} destination links detected")
+        print(f"3. AVAILABLE PRODUCT ENTITIES:    {len(extracted_candidates)} product candidates detected on page")
+        print(f"4. CURRENT TASK STATE:            Phase={task_state.phase}, verified={len(task_state.verified_candidates)}/{task_state.required_candidate_count}, selected={'SET' if task_state.selected_target else 'None'}")
+        print(f"5. REQUIRED NEXT PREDICATE:       {next_predicate}")
+        print(f"6. SELECTED ACTION:               {selected_act_str}")
+        print(f"7. ACTION PRECONDITIONS:          Validated by Action Grounding & Semantic Engine")
+        clean_summary = summary.encode('ascii', errors='backslashreplace').decode('ascii')
+        print(f"8. WHY OTHER ACTIONS REJECTED:    {clean_summary}")
+        print("="*60 + "\n")
+    except Exception:
+        pass
+
+    return actions, summary
+
+

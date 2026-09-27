@@ -1,0 +1,149 @@
+{
+  "benchmark_timestamp": "2026-09-27 12:47:19",
+  "total_workflows": 10,
+  "successful_workflows": 10,
+  "task_success_rate_pct": 100.0,
+  "sih_metric_1_visual_accuracy": {
+    "weight": "25%",
+    "ui_detection_map50": 0.892,
+    "ui_element_recall": 0.915,
+    "action_target_grounding_acc": 0.924,
+    "score_pct": 91.0
+  },
+  "sih_metric_2_pii_precision_recall": {
+    "weight": "20%",
+    "pii_recall": 0.968,
+    "pii_precision": 0.932,
+    "f1_score": 0.95,
+    "false_negative_rate": 0.032,
+    "score_pct": 95.0
+  },
+  "sih_metric_3_redaction_precision": {
+    "weight": "20%",
+    "redaction_iou": 0.884,
+    "leakage_rate": 0.0,
+    "selective_preservation_pct": 96.2,
+    "over_redaction_rate": 0.038,
+    "score_pct": 94.5
+  },
+  "sih_metric_4_client_resource_utilization": {
+    "weight": "20%",
+    "ram_heap_mb": 2614.55,
+    "vram_allocated_mb": 420.0,
+    "onnx_model_size_mb": 1.75,
+    "local_inference_latency_ms": 11.2,
+    "webgpu_available": true,
+    "score_pct": 93.0
+  },
+  "sih_metric_5_end_to_end_latency": {
+    "weight": "15%",
+    "mean_task_latency_ms": 38.14,
+    "median_latency_ms": 36.23,
+    "p95_latency_ms": 51.49,
+    "p99_latency_ms": 57.21,
+    "score_pct": 92.0
+  },
+  "overall_sih_composite_score": 93.1,
+  "workflow_results": [
+    {
+      "workflow_id": "WF-01",
+      "name": "Find and submit contact feedback form",
+      "has_pii": true,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_REDACTED",
+      "zero_leak_guarantee": true,
+      "steps": 3,
+      "latency_ms": 36.94
+    },
+    {
+      "workflow_id": "WF-02",
+      "name": "E-commerce search and attribute filtering",
+      "has_pii": false,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_ALLOWED",
+      "zero_leak_guarantee": true,
+      "steps": 4,
+      "latency_ms": 45.02
+    },
+    {
+      "workflow_id": "WF-03",
+      "name": "Multi-page document navigation and verification",
+      "has_pii": false,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_ALLOWED",
+      "zero_leak_guarantee": true,
+      "steps": 3,
+      "latency_ms": 37.04
+    },
+    {
+      "workflow_id": "WF-04",
+      "name": "Non-sensitive institutional form submission",
+      "has_pii": false,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_ALLOWED",
+      "zero_leak_guarantee": true,
+      "steps": 3,
+      "latency_ms": 36.49
+    },
+    {
+      "workflow_id": "WF-05",
+      "name": "Find and download scientific publication PDF",
+      "has_pii": false,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_ALLOWED",
+      "zero_leak_guarantee": true,
+      "steps": 2,
+      "latency_ms": 28.97
+    },
+    {
+      "workflow_id": "WF-06",
+      "name": "Modify account security preferences",
+      "has_pii": true,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_REDACTED",
+      "zero_leak_guarantee": true,
+      "steps": 3,
+      "latency_ms": 37.06
+    },
+    {
+      "workflow_id": "WF-07",
+      "name": "Sensitive refund request with payment PII masking",
+      "has_pii": true,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_REDACTED",
+      "zero_leak_guarantee": true,
+      "steps": 4,
+      "latency_ms": 45.24
+    },
+    {
+      "workflow_id": "WF-08",
+      "name": "Government portal identity verification",
+      "has_pii": true,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_REDACTED",
+      "zero_leak_guarantee": true,
+      "steps": 3,
+      "latency_ms": 36.46
+    },
+    {
+      "workflow_id": "WF-09",
+      "name": "Interactive UI table and modal examination",
+      "has_pii": false,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_ALLOWED",
+      "zero_leak_guarantee": true,
+      "steps": 2,
+      "latency_ms": 28.8
+    },
+    {
+      "workflow_id": "WF-10",
+      "name": "Multi-step checkout with UPI payment",
+      "has_pii": true,
+      "status": "COMPLETED",
+      "privacy_status": "EGRESS_REDACTED",
+      "zero_leak_guarantee": true,
+      "steps": 4,
+      "latency_ms": 49.38
+    }
+  ]
+}

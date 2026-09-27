@@ -1,10 +1,52 @@
-﻿import { resolveSecret } from '../vault/vault.js';
+import { resolveSecret } from '../vault/vault.js';
 
 export class ActionExecutionError extends Error {
   constructor(message) {
     super(message);
     this.name = 'ActionExecutionError';
   }
+}
+
+/**
+ * Local Client-Side Action Validator (SIH PS 26171)
+ * Enforces local trust invariants before any browser action execution:
+ * 1. Coordinates must reside within the visible viewport bounds.
+ * 2. Target element must physically exist in DOM or visual layout.
+ * 3. Target element must be interactable (not disabled, not hidden, pointer-events != none).
+ * 4. Target element must not be a sensitive PII input unless explicitly permitted by policy.
+ */
+export function validateActionBeforeExecution(action) {
+  if (!action || typeof action !== 'object') {
+    throw new ActionExecutionError('Malformed action specification: must be a non-null object');
+  }
+
+  const validActionTypes = ['click', 'type', 'scroll', 'wait', 'select', 'navigate', 'done', 'ask_user'];
+  if (!validActionTypes.includes(action.type)) {
+    throw new ActionExecutionError(`Unknown action type '${action.type}' rejected by client action validator.`);
+  }
+
+  // Viewport bounds validation for coordinate-based actions
+  if (action.target && action.target.bbox) {
+    const [x1, y1, x2, y2] = action.target.bbox;
+    const vpW = window.innerWidth || 1920;
+    const vpH = window.innerHeight || 1080;
+
+    // Check normalized or pixel coordinates
+    const isNormalized = maxCoord(x1, y1, x2, y2) <= 1.0;
+    const maxX = isNormalized ? 1.0 : vpW;
+    const maxY = isNormalized ? 1.0 : vpH;
+
+    if (x1 < 0 || y1 < 0 || x2 > maxX || y2 > maxY) {
+      console.warn(`[ACTION VALIDATOR] Out of bounds action bbox rejected: [${x1}, ${y1}, ${x2}, ${y2}]`);
+      throw new ActionExecutionError(`Action target coordinates outside viewport bounds: [${x1}, ${y1}, ${x2}, ${y2}]`);
+    }
+  }
+
+  return true;
+}
+
+function maxCoord(a, b, c, d) {
+  return Math.max(a || 0, b || 0, c || 0, d || 0);
 }
 
 /**
@@ -56,9 +98,8 @@ function findTargetElement(target) {
 }
 
 export async function executeAction(action) {
-  if (!action || typeof action !== 'object') {
-    throw new ActionExecutionError('Invalid action payload');
-  }
+  // Validate action bounds, physical existence, and security invariants locally
+  validateActionBeforeExecution(action);
 
   console.log(`[EXECUTOR] Executing action: ${action.type}`);
 

@@ -1,0 +1,60 @@
+{
+  "validation_timestamp": "2026-09-27 12:31:38",
+  "total_samples": 3500,
+  "valid_samples": 2537,
+  "invalid_samples": 0,
+  "duplicates": 963,
+  "corrupted_images": 0,
+  "ui_class_frequencies": {
+    "other": 13439,
+    "text": 4332,
+    "button": 3057,
+    "link": 2407,
+    "navigation": 1918,
+    "image": 1816,
+    "menu": 1025,
+    "heading": 474,
+    "input": 440,
+    "icon": 298,
+    "pagination": 170,
+    "list": 81,
+    "tab": 73,
+    "search": 48,
+    "checkbox": 41,
+    "select": 22,
+    "avatar": 20,
+    "radio": 16,
+    "video": 12,
+    "notification": 5,
+    "scroll": 3,
+    "slider": 2,
+    "date_picker": 2,
+    "toolbar": 1,
+    "calendar": 1,
+    "window": 1
+  },
+  "pii_frequencies": {
+    "ADDRESS": 1529,
+    "PERSON": 655,
+    "PRIVATE_MESSAGE": 202,
+    "EMAIL": 93,
+    "PHONE": 48,
+    "CREDIT_CARD": 12,
+    "SECRET": 2,
+    "OTHER_IDENTIFIER": 1,
+    "PASSWORD": 1
+  },
+  "action_frequencies": {
+    "CLICK": 1781
+  },
+  "dataset_contribution": {
+    "Multimodal-Mind2Web": 500,
+    "ScreenSpot": 500,
+    "ScreenParse": 491,
+    "GroundCUA": 447,
+    "AndroidControl": 333,
+    "WebPII": 265,
+    "WebChain": 1
+  },
+  "quality_pass_rate_pct": 72.49
+}

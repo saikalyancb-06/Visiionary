@@ -669,6 +669,113 @@ payload_t12 = make_payload(
 acts_t12, sum_t12 = decide_next_action(payload_t12)
 results.append(("TEST 19.12: No candidate satisfies all hard constraints yields NO_VALID_TARGET_FOUND without selecting closest match", "NO_VALID_TARGET_FOUND" in sum_t12 and acts_t12[0].type == "scroll"))
 
+# ==============================================================================
+# SECTION 20: PRODUCT CANDIDATE ENTITY EXTRACTION & MULTI-ELEMENT AGGREGATION TESTS
+# ==============================================================================
+from server.app.candidate_extractor import (
+    ProductCandidate,
+    extract_product_candidates,
+    verify_product_candidate_match,
+    rank_product_candidates
+)
+
+# TEST 20.1: Product attributes distributed across multiple DOM elements become ONE ProductCandidate
+multi_dom_elements = [
+    ElementMetadata(id="el_title", role="h2", label="Cotton Casual Slim Fit Shirt", interactable=True, bbox=[10, 10, 200, 30], href="https://example.com/p/item-101"),
+    ElementMetadata(id="el_badge", role="span", label="Best Seller", interactable=False, bbox=[10, 5, 80, 15], href="https://example.com/p/item-101"),
+    ElementMetadata(id="el_price", role="span", label="$29.99", interactable=False, bbox=[10, 35, 80, 50], href="https://example.com/p/item-101"),
+    ElementMetadata(id="el_cat", role="span", label="Men's Clothing / Black", interactable=False, bbox=[10, 55, 120, 70], href="https://example.com/p/item-101")
+]
+cands_20_1 = extract_product_candidates(multi_dom_elements)
+results.append(("TEST 20.1: Product attributes distributed across multiple DOM elements become ONE ProductCandidate", 
+    len(cands_20_1) == 1 and 
+    cands_20_1[0].color == "black" and 
+    cands_20_1[0].gender == "men" and 
+    cands_20_1[0].price == "$29.99" and 
+    "best seller" in [b.lower() for b in cands_20_1[0].badges] and 
+    set(cands_20_1[0].source_element_ids) == {"el_title", "el_badge", "el_price", "el_cat"}
+))
+
+# TEST 20.2: Multiple product cards on one page remain distinct entities
+two_cards_elements = [
+    # Card 1: Black Shirt (Best Seller)
+    ElementMetadata(id="c1_title", role="h3", label="Men's Black Oxford Shirt", interactable=True, bbox=[10, 10, 200, 30], href="https://example.com/p/shirt-101"),
+    ElementMetadata(id="c1_badge", role="span", label="Best Seller", interactable=False, bbox=[10, 5, 80, 15], href="https://example.com/p/shirt-101"),
+    ElementMetadata(id="c1_price", role="span", label="$35.00", interactable=False, bbox=[10, 35, 80, 50], href="https://example.com/p/shirt-101"),
+    # Card 2: Blue Jeans
+    ElementMetadata(id="c2_title", role="h3", label="Men's Regular Fit Blue Jeans", interactable=True, bbox=[10, 200, 200, 220], href="https://example.com/p/jeans-202"),
+    ElementMetadata(id="c2_price", role="span", label="$45.00", interactable=False, bbox=[10, 225, 80, 240], href="https://example.com/p/jeans-202")
+]
+cands_20_2 = extract_product_candidates(two_cards_elements)
+results.append(("TEST 20.2: Multiple product cards on one page are partitioned into distinct entities", 
+    len(cands_20_2) == 2 and 
+    {"c1_title", "c1_badge", "c1_price"}.issubset(set(cands_20_2[0].source_element_ids if "shirt" in cands_20_2[0].title.lower() else cands_20_2[1].source_element_ids))
+))
+
+# TEST 20.3: Badge belonging to one product card is NOT attributed to another card
+shirt_card = next(c for c in cands_20_2 if "shirt" in c.title.lower())
+jeans_card = next(c for c in cands_20_2 if "jeans" in c.title.lower())
+results.append(("TEST 20.3: Badge belonging to one product is NOT attributed to adjacent product", 
+    len(shirt_card.badges) > 0 and len(jeans_card.badges) == 0
+))
+
+# TEST 20.4: Href belongs to the correct aggregated product entity
+results.append(("TEST 20.4: Href is accurately associated with each distinct product candidate", 
+    shirt_card.href == "https://example.com/p/shirt-101" and jeans_card.href == "https://example.com/p/jeans-202"
+))
+
+# TEST 20.5: Correct product vs visually similar product (dress vs shirt in same color)
+const_shirt = extract_product_constraints("find a black shirt and open it")
+cand_shirt = ProductCandidate(candidate_id="c_sh", title="Black Silk Button Shirt", visible_text="Women's Black Silk Button Shirt")
+cand_dress = ProductCandidate(candidate_id="c_dr", title="Black Evening Gown Dress", visible_text="Women's Black Evening Gown Dress")
+m_sh, _ = verify_product_candidate_match(cand_shirt, const_shirt)
+m_dr, r_dr = verify_product_candidate_match(cand_dress, const_shirt)
+results.append(("TEST 20.5: Candidate verifier accepts matching product type and strictly rejects visually similar category", 
+    m_sh and not m_dr and "product type mismatch" in r_dr.lower()
+))
+
+# TEST 20.6: Page reconstruction compares CURRENT_PRODUCT against SELECTED_TARGET
+payload_open_correct = VerificationPayload(
+    task="find a black shirt and open it",
+    current_url="https://generic-store.com/p/black-shirt-101",
+    page_title="Men's Casual Black Shirt - Online Store",
+    action_history=[{"action": "click", "target": "c1_title"}],
+    selected_target={"title": "Men's Black Oxford Shirt", "candidate_id": "cand_1", "href": "https://example.com/p/shirt-101"}
+)
+res_open_correct = verify_task_completion(payload_open_correct)
+payload_open_wrong = VerificationPayload(
+    task="find a black shirt and open it",
+    current_url="https://generic-store.com/p/blue-jeans-202",
+    page_title="Men's Regular Fit Blue Jeans - Online Store",
+    action_history=[{"action": "click", "target": "c2_title"}],
+    selected_target={"title": "Men's Black Oxford Shirt", "candidate_id": "cand_1", "href": "https://example.com/p/shirt-101"}
+)
+res_open_wrong = verify_task_completion(payload_open_wrong)
+results.append(("TEST 20.6: Page reconstruction confirms CURRENT_PRODUCT == SELECTED_TARGET and rejects mismatch", 
+    res_open_correct.achieved and not res_open_wrong.achieved and "TARGET_MISMATCH" in res_open_wrong.reason
+))
+
+# TEST 20.7: Cart verification confirms cart contains SELECTED_TARGET product
+payload_cart_correct = VerificationPayload(
+    task="find a black shirt and add to cart",
+    current_url="https://generic-store.com/cart",
+    page_title="Shopping Cart - Men's Black Oxford Shirt (1 Item) - Added to Cart",
+    action_history=[{"action": "click", "target": "btn_cart"}],
+    selected_target={"title": "Men's Black Oxford Shirt", "candidate_id": "cand_1"}
+)
+res_cart_correct = verify_task_completion(payload_cart_correct)
+payload_cart_wrong = VerificationPayload(
+    task="find a black shirt and add to cart",
+    current_url="https://generic-store.com/cart",
+    page_title="Shopping Cart - Men's Blue Jeans (1 Item) - Added to Cart",
+    action_history=[{"action": "click", "target": "btn_cart"}],
+    selected_target={"title": "Men's Black Oxford Shirt", "candidate_id": "cand_1"}
+)
+res_cart_wrong = verify_task_completion(payload_cart_wrong)
+results.append(("TEST 20.7: Cart verification confirms cart contains selected product and rejects unrelated cart contents", 
+    res_cart_correct.achieved and not res_cart_wrong.achieved
+))
+
 # Print summary
 passed = 0
 failed = 0
@@ -680,3 +787,4 @@ for name, ok in results:
 
 print(f"\n  Total: {passed+failed}  Passed: {passed}  Failed: {failed}\n")
 sys.exit(0 if failed == 0 else 1)
+

@@ -17,7 +17,7 @@ let agentState = {
   tabId: null,
   windowId: null,
   step: 0,
-  maxSteps: 8,
+  maxSteps: 20,
   currentAction: '',
   currentUrl: '',
   verificationState: null,
@@ -312,7 +312,7 @@ async function captureAndSanitizeTab(tabId, windowId, taskInstruction, stepNumbe
 // ---------------------------------------------------------------------------
 // Navigation-safe action executor with 12 generalized action dispatches
 // ---------------------------------------------------------------------------
-const NAVIGATION_TRIGGERING_ACTIONS = new Set(['click', 'open_link', 'navigate', 'keypress', 'search', 'go_back', 'go_forward', 'download']);
+const NAVIGATION_TRIGGERING_ACTIONS = new Set(['click', 'open_link', 'navigate', 'keypress', 'search', 'type', 'go_back', 'go_forward', 'download']);
 
 async function executeAction(tabId, act, navTracker) {
   let actRes = null;
@@ -366,6 +366,9 @@ async function executeAction(tabId, act, navTracker) {
     await new Promise(r => setTimeout(r, 150));
     await navTracker.waitForNavigationComplete(3000);
     await ensureContentScript(tabId);
+  } else if (act.type === 'scroll') {
+    // Give browser viewport and virtual DOM time to render newly revealed elements
+    await new Promise(r => setTimeout(r, 600));
   } else {
     const delay = act.milliseconds || 200;
     await new Promise(r => setTimeout(r, delay));
@@ -415,6 +418,17 @@ async function verifyWithServer(taskInstruction, currentUrl, pageTitle, screenSu
         mime_type: d.mime,
         state: d.state,
         file_size: d.total_bytes
+      })),
+      elements: (pageElements || []).slice(0, 60).map(e => ({
+        id: e.id,
+        role: e.role || 'element',
+        label: e.label || '',
+        bbox: e.bbox || [0, 0, 0, 0],
+        interactable: Boolean(e.interactable),
+        sensitivity: e.sensitivity || 'safe',
+        source: e.source || 'dom',
+        confidence: e.confidence || 1.0,
+        href: e.href || null
       })),
       product_constraints: productConstraints || null,
       selected_target: selectedTarget || null
@@ -470,7 +484,7 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
     tabId: targetTabId,
     windowId: targetWindowId,
     step: 1,
-    maxSteps: 8,
+    maxSteps: 20,
     currentAction: 'Locking to Tab #' + targetTabId,
     currentUrl: tab.url || '',
     verificationState: { verified: false, reason: 'Initiated', goal_status: 'GOAL_NOT_YET_ACHIEVED' },
@@ -525,12 +539,17 @@ async function runClosedLoopTask(taskInstruction, sendResponse) {
       if (recentSigs.length === 3 && recentSigs[0] === recentSigs[1] && recentSigs[1] === recentSigs[2]) {
         agentState.loopProtection.loopDetected = true;
         broadcastStateUpdate('[LOOP SHIELD] Repetitive page state detected. Triggering recovery hint...', 'warn');
-        sanitizedPayload.instruction_sanitized += ' (Note: Loop shield detected no state change. Try an alternative link/element, open_link via observed href, or navigate directly).';
+        const loopHint = 'Loop shield detected no state change. Try an alternative link/element, open_link via observed href, or navigate directly.';
+        sanitizedPayload.recovery_state = { loop_detected: true, hint: loopHint };
+        if (sanitizedPayload.verification_state) {
+          sanitizedPayload.verification_state.next_hint = loopHint;
+        }
       }
 
       // 2. PLAN VIA EGRESS GATE
       agentState.status = 'PLANNING';
       agentState.currentAction = 'Requesting plan from Egress Gate...';
+      console.log(`[PS26171 DIAGNOSTIC] PLANNER INPUT ELEMENT COUNT: ${sanitizedPayload.elements.length} | REDACTIONS: ${sanitizedPayload.redactions.length} | TASK: "${taskInstruction}"`);
       broadcastStateUpdate(`[PLAN] Sending sanitized context (${sanitizedPayload.elements.length} elements) to planner...`);
 
       // Attach preserved product constraints and selected target across iterations

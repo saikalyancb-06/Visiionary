@@ -54,6 +54,7 @@ class SanitizedContextPackage(BaseModel):
     selected_target: Optional[Dict[str, Any]] = None
     missing_prerequisites: Optional[Dict[str, Any]] = None
     recovery_state: Optional[Dict[str, Any]] = None
+    task_execution_state: Optional[Dict[str, Any]] = None  # dependency-aware state machine
 
 class ActionTarget(BaseModel):
     element_id: Optional[str] = None
@@ -85,7 +86,8 @@ class AgentPlanResponse(BaseModel):
     selected_target: Optional[Dict[str, Any]] = None
     missing_prerequisites: Optional[Dict[str, Any]] = None
     recovery_state: Optional[Dict[str, Any]] = None
-    state: str = "IDLE"  # SEARCH_COMPLETE | TARGET_CANDIDATE_FOUND | TARGET_IDENTIFIED | TARGET_VERIFIED | PREREQUISITES_RESOLVED | ACTION_EXECUTED | ACTION_VERIFIED | GOAL_ACHIEVED
+    state: str = "IDLE"
+    task_execution_state: Optional[Dict[str, Any]] = None  # dependency-aware state machine
 
 class DownloadItem(BaseModel):
     id: Optional[int] = None
@@ -101,6 +103,7 @@ class VerificationPayload(BaseModel):
     screen_summary: Optional[Dict[str, Any]] = None
     action_history: List[Dict[str, Any]] = Field(default_factory=list)
     downloads: List[DownloadItem] = Field(default_factory=list)
+    elements: List[ElementMetadata] = Field(default_factory=list)
     last_action: Optional[Dict[str, Any]] = None
     product_constraints: Optional[Dict[str, Any]] = None
     selected_target: Optional[Dict[str, Any]] = None

@@ -1,0 +1,35 @@
+{
+  "ui_detector": {
+    "checkpoint": "models/checkpoints/ui_detector_best.pt",
+    "onnx": "models/onnx/ui_detector.onnx",
+    "version": "1.0.0",
+    "classes": 34,
+    "metrics": {
+      "mAP50": 0.892,
+      "precision": 0.915,
+      "recall": 0.894
+    }
+  },
+  "pii_detector": {
+    "checkpoint": "models/checkpoints/pii_detector_best.pt",
+    "onnx": "models/onnx/pii_detector.onnx",
+    "version": "2.5.0",
+    "classes": 26,
+    "metrics": {
+      "recall": 0.968,
+      "precision": 0.932,
+      "f1": 0.95,
+      "leakage_rate": 0.0
+    }
+  },
+  "action_grounder": {
+    "checkpoint": "models/checkpoints/action_grounder_best.pt",
+    "onnx": "models/onnx/action_grounder.onnx",
+    "version": "1.0.0",
+    "actions": 9,
+    "metrics": {
+      "action_accuracy": 0.924,
+      "target_grounding_accuracy": 0.898
+    }
+  }
+}

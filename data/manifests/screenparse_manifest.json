@@ -1,0 +1,35 @@
+{
+  "dataset_name": "ScreenParse",
+  "repo_id": "docling-project/screenparse",
+  "license": "ODC-By 1.0",
+  "purpose": "Dense UI screen parsing, 55 UI classes, bounding boxes, reading order",
+  "storage_policy": "Complete valid shards selected within project storage target",
+  "download_timestamp": "2026-09-27 12:31:18",
+  "total_files": 1,
+  "total_size_mb": 555.32,
+  "total_samples": 1000,
+  "files": [
+    {
+      "filename": "train/000000.parquet",
+      "local_path": "data\\external\\screenparse\\train\\000000.parquet",
+      "size_bytes": 582300457,
+      "size_mb": 555.32,
+      "sha256": "feee2590a33362497f8100c8ff9d49acc45a60a2f656b30276f96c52952216cc",
+      "num_samples": 1000,
+      "columns": [
+        "id",
+        "image",
+        "url",
+        "width",
+        "height",
+        "bboxes",
+        "labels",
+        "texts",
+        "interactable",
+        "reading_order",
+        "num_elements"
+      ],
+      "status": "VERIFIED_VALID"
+    }
+  ]
+}

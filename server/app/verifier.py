@@ -27,10 +27,11 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
     history_actions = [h.get("action") for h in history if isinstance(h, dict)]
     screen_summary = payload.screen_summary or {}
     headings = [h.lower() for h in screen_summary.get("main_headings", [])]
-    combined_page_text = f"{title} {' '.join(headings)} {url}"
+    elements_light = payload.elements or []
+    element_text = " ".join((e.label or "") for e in elements_light).lower()
+    combined_page_text = f"{title} {' '.join(headings)} {element_text} {url}"
 
     # Track Subgoal State dynamically based on observable DOM & URL state
-    elements_light = []
     subgoals, completed_subgoals, remaining_goal = track_subgoal_progress(
         task, url, title, elements_light, history
     )
@@ -95,7 +96,6 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
         has_cart_evidence = any(ind in combined_page_text for ind in cart_success_indicators)
         has_click = any(h == "click" for h in history_actions)
 
-        # Re-verify that target constraints are satisfied on the page where action occurred
         from server.app.product_constraints import (
             extract_product_constraints,
             verify_candidate_match,
@@ -103,11 +103,45 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
             STATE_ACTION_VERIFIED,
             STATE_GOAL_ACHIEVED
         )
+        from server.app.candidate_extractor import (
+            ProductCandidate,
+            print_candidate_diagnostics
+        )
         constraints = payload.product_constraints or extract_product_constraints(task)
         matches_target = True
         match_reason = "ok"
         if constraints.get("product_type"):
             matches_target, match_reason = verify_candidate_match(combined_page_text, constraints)
+
+        # Selected target comparison if present
+        sel_t = payload.selected_target
+        cart_cand = ProductCandidate(
+            candidate_id="cart_observed",
+            title=payload.page_title,
+            visible_text=combined_page_text
+        )
+
+        if sel_t:
+            sel_title = sel_t.get("title", "").lower()
+            # If selected target has title, ensure cart reflects it or product type
+            if sel_title and len(sel_title) > 5:
+                title_words = [w for w in sel_title.split() if len(w) > 3]
+                if not any(w in combined_page_text.lower() for w in title_words):
+                    matches_target = False
+                    match_reason = f"Cart page item '{combined_page_text[:40]}' does not match selected product '{sel_title[:40]}'"
+
+            # Diagnostic tracing
+            print_candidate_diagnostics(
+                all_candidates=[],
+                valid_candidates=[],
+                rejected_candidates=[],
+                selected_target=ProductCandidate(
+                    candidate_id=sel_t.get("candidate_id", "selected"),
+                    title=sel_t.get("title", ""),
+                    href=sel_t.get("href")
+                ),
+                cart_product=cart_cand
+            )
 
         if has_cart_evidence and has_click and matches_target:
             return VerificationResponse(
@@ -122,6 +156,7 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
                 product_state=STATE_GOAL_ACHIEVED,
                 verification_state="GOAL_ACHIEVED"
             )
+
         elif has_click and not has_cart_evidence:
             return VerificationResponse(
                 achieved=False,
@@ -202,17 +237,48 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
     # -------------------------------------------------------------------------
     # 5. Postcondition: Open Product / Item Detail Verification
     # -------------------------------------------------------------------------
-    wants_open_product = any(w in task_lower for w in ["open it", "open product", "open the", "view details", "open selected"])
+    wants_open_product = any(w in task_lower for w in ["open it", "open product", "open the", "view details", "open selected"]) or any(sg == "open selected product" for sg in subgoals)
     if wants_open_product:
         # Observable evidence: URL or title points to an item details view
         is_on_product_page = any(k in url for k in ("/dp/", "/gp/product/", "/p/", "/item/", "/product/", "/detail/")) or any(k in title for k in ("product details", "buy ", ": clothing", "specifications"))
         has_click = any(h == "click" for h in history_actions)
 
         if is_on_product_page and has_click:
-            # Re-verify that opened product page ACTUALLY matches requested product constraints
             from server.app.product_constraints import extract_product_constraints, verify_candidate_match
+            from server.app.candidate_extractor import ProductCandidate, print_candidate_diagnostics
             constraints = payload.product_constraints or extract_product_constraints(task)
             matches_target, match_reason = verify_candidate_match(combined_page_text, constraints)
+
+            # Reconstruct current product representation from the opened page
+            current_prod = ProductCandidate(
+                candidate_id="page_reconstructed",
+                title=payload.page_title,
+                visible_text=combined_page_text,
+                href=url
+            )
+
+            sel_t = payload.selected_target
+            if sel_t:
+                sel_title = sel_t.get("title", "").lower()
+                if sel_title and len(sel_title) > 5:
+                    title_words = [w for w in sel_title.split() if len(w) > 3]
+                    # Ensure opened page matches selected target identity
+                    if not any(w in combined_page_text.lower() for w in title_words):
+                        matches_target = False
+                        match_reason = f"Opened page '{payload.page_title}' does not match selected target '{sel_t.get('title')}'"
+
+                # Diagnostic trace
+                print_candidate_diagnostics(
+                    all_candidates=[],
+                    valid_candidates=[],
+                    rejected_candidates=[],
+                    selected_target=ProductCandidate(
+                        candidate_id=sel_t.get("candidate_id", "selected"),
+                        title=sel_t.get("title", ""),
+                        href=sel_t.get("href")
+                    ),
+                    current_product=current_prod
+                )
 
             if not matches_target:
                 return VerificationResponse(
@@ -234,6 +300,7 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
                         "required_recovery": "choose_different_candidate"
                     }
                 )
+
 
             return VerificationResponse(
                 achieved=True,
@@ -263,16 +330,36 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
             )
 
     # -------------------------------------------------------------------------
-    # 6. Specific Number / Code Match (e.g. PS 171)
+    # 6. Specific Number / Code Match (e.g. PS 171, PS 143)
     # -------------------------------------------------------------------------
-    ps_match = re.search(r'(?:problem statement|ps|item|number|no\.?)\s*([0-9]{2,5})|(?:\b([0-9]{3,5})\b)', task_lower)
+    ps_match = re.search(r'(?:problem statement|ps|item|number|no\.?)\s*(?:no\.?|id|#)?\s*([0-9]{2,5})|(?:\b([0-9]{3,5})\b)', task_lower)
     if ps_match and not has_downstream:
         target_num = ps_match.group(1) or ps_match.group(2)
-        if not is_search_engine_page and target_num and target_num in combined_page_text:
+        if not is_search_engine_page and target_num:
+            target_present = (target_num in combined_page_text) or any(target_num in tok for tok in combined_page_text.split())
+            if target_present:
+                return VerificationResponse(
+                    achieved=True,
+                    confidence=0.95,
+                    reason=f"Goal verified achieved: Target item {target_num} confirmed present on current page context.",
+                    goal_status="GOAL_ACHIEVED",
+                    subgoals=subgoals,
+                    completed_subgoals=subgoals,
+                    remaining_goal="None"
+                )
+
+    # -------------------------------------------------------------------------
+    # 7. Basic Search Query Task (ONLY when NO downstream actions exist and NO product is requested)
+    # -------------------------------------------------------------------------
+    if ("find" in task_lower or "search" in task_lower) and not has_downstream:
+        from server.app.product_constraints import extract_product_constraints
+        constraints = payload.product_constraints or extract_product_constraints(task)
+        is_product_finding = bool(constraints.get("product_type") or constraints.get("attributes"))
+        if not is_product_finding and not is_search_engine_page and len(history_actions) >= 1:
             return VerificationResponse(
                 achieved=True,
-                confidence=0.92,
-                reason=f"Goal verified achieved: Target item {target_num} confirmed present on current page context.",
+                confidence=0.90,
+                reason="Goal verified achieved: Search results located and presented on screen.",
                 goal_status="GOAL_ACHIEVED",
                 subgoals=subgoals,
                 completed_subgoals=subgoals,
@@ -280,14 +367,28 @@ def verify_task_completion(payload: VerificationPayload) -> VerificationResponse
             )
 
     # -------------------------------------------------------------------------
-    # 7. Basic Search Query Task (ONLY when NO downstream actions exist)
+    # 7.5. Informational / Query / Scores / Content Verification
     # -------------------------------------------------------------------------
-    if ("find" in task_lower or "search" in task_lower) and not has_downstream:
-        if not is_search_engine_page and len(history_actions) >= 1:
+    is_info_task = any(t in task_lower for t in (
+        "score", "scores", "result", "results", "schedule", "fixtures", "standings",
+        "news", "weather", "article", "portal", "problem statement", "ps", "ranking",
+        "rankings", "stats", "statistics", "table tennis", "match", "tournament",
+        "quarter-final", "quarterfinal", "semi-final", "final"
+    ))
+
+    if is_info_task and not has_downstream and not is_search_engine_page:
+        # Check topic word overlap with page context
+        stop_words = {"open", "in", "the", "a", "an", "and", "for", "to", "of", "on", "at", "by", "with", "event", "me", "show", "find"}
+        topic_words = [w for w in re.split(r'[^a-zA-Z0-9]+', task_lower) if len(w) > 2 and w not in stop_words]
+        matched_words = [w for w in topic_words if (w in combined_page_text or w.rstrip('s') in combined_page_text)]
+        match_ratio = len(matched_words) / len(topic_words) if topic_words else 0
+        has_content_indicators = any(ind in combined_page_text for ind in ("results", "result", "scores", "score", "quarter-final", "1/8", "final", "table tennis", "match", "points", "winner"))
+
+        if (match_ratio >= 0.5 and has_content_indicators) or match_ratio >= 0.7:
             return VerificationResponse(
                 achieved=True,
-                confidence=0.90,
-                reason="Goal verified achieved: Search results located and presented on screen.",
+                confidence=0.95,
+                reason=f"Goal verified achieved: Requested information and scores for '{task}' successfully located and displayed on screen.",
                 goal_status="GOAL_ACHIEVED",
                 subgoals=subgoals,
                 completed_subgoals=subgoals,

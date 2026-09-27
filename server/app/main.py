@@ -7,8 +7,9 @@ Updated Server Planner supporting Local Ollama LLM (Qwen3.5:9B):
 from fastapi import FastAPI, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from server.app.schemas.schemas import SanitizedContextPackage, AgentPlanResponse, BrowserAction, ActionTarget, ActionValue
-from server.app.llm_planner import plan_with_local_llm, check_ollama_status
+from server.app.llm_planner import plan_with_best_llm, check_active_planner
 from server.app.planner import decide_next_action
+from server.app.privacy.verhoeff import validate_verhoeff, normalize_digits
 import re
 
 app = FastAPI(title="Visiionary Privacy Browser Agent Server", version="2.5.0")
@@ -38,16 +39,54 @@ _PAT_PAN = re.compile(r"\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b")
 _PAT_AADHAAR = re.compile(r"\b\d{4}[\-\s]?\d{4}[\-\s]?\d{4}\b")
 # UPI ID
 _PAT_UPI = re.compile(r"[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}")
+# Bank account in transfer instructions
+_PAT_BANK_ACC = re.compile(r"(?:account|funds|to|a/c|acc)[\s:#-]*(\d{9,18})\b", re.IGNORECASE)
 
 # Patterns run on prose text fields only (NOT element IDs or binary data)
 SERVER_PII_PROSE_PATTERNS = [
-    ("EMAIL",   _PAT_EMAIL),
-    ("PHONE",   _PAT_PHONE),
-    ("CARD",    _PAT_CARD),
-    ("PAN",     _PAT_PAN),
-    ("AADHAAR", _PAT_AADHAAR),
-    ("UPI",     _PAT_UPI),
+    ("EMAIL",    _PAT_EMAIL),
+    ("PHONE",    _PAT_PHONE),
+    ("CARD",     _PAT_CARD),
+    ("PAN",      _PAT_PAN),
+    ("AADHAAR",  _PAT_AADHAAR),
+    ("UPI",      _PAT_UPI),
+    ("BANK_ACC", _PAT_BANK_ACC),
 ]
+
+def luhn_checksum(card_number: str) -> bool:
+    """Validate payment card using standard Luhn algorithm."""
+    digits = [int(d) for d in re.sub(r"\D", "", card_number)]
+    if len(digits) < 13 or len(digits) > 19:
+        return False
+    checksum = 0
+    reverse_digits = digits[::-1]
+    for i, digit in enumerate(reverse_digits):
+        if i % 2 == 1:
+            doubled = digit * 2
+            checksum += doubled - 9 if doubled > 9 else doubled
+        else:
+            checksum += digit
+    return checksum % 10 == 0
+
+def is_genuine_pii(pat_name: str, match_str: str) -> bool:
+    """
+    Validates whether candidate string is genuine PII vs non-PII false positive
+    (e.g., e-commerce product SKUs, catalog IDs, tracking numbers).
+    """
+    if pat_name == "AADHAAR":
+        clean = normalize_digits(match_str).replace(" ", "").replace("-", "")
+        if len(clean) != 12 or not clean.isdigit():
+            return False
+        # UIDAI specification: Aadhaar numbers NEVER begin with '0' or '1'
+        if clean[0] in ("0", "1"):
+            return False
+        return validate_verhoeff(clean)
+    if pat_name == "CARD":
+        clean = re.sub(r"\D", "", match_str)
+        if len(clean) < 13 or len(clean) > 19:
+            return False
+        return luhn_checksum(clean)
+    return True
 
 # Sensitive raw secret keywords that MUST NEVER appear in raw value form
 FORBIDDEN_RAW_SECRETS = [
@@ -106,13 +145,13 @@ def collect_text_fields_for_scan(payload: SanitizedContextPackage) -> list[tuple
 
 @app.get("/")
 def root():
-    ollama_info = check_ollama_status()
+    planner_info = check_active_planner()
     return {
-        "service": "Visiionary Local Planner Server",
+        "service": "Visiionary Privacy Planner Server",
         "status": "online",
         "privacy_shield": "active",
-        "planner": "LOCAL_OLLAMA" if ollama_info["available"] else "LOCAL_SEMANTIC",
-        "model": ollama_info["model"],
+        "planner": planner_info["provider"].upper(),
+        "model": planner_info["model"],
         "endpoints": {
             "health": "/api/health",
             "plan": "/api/agent/plan",
@@ -122,33 +161,47 @@ def root():
 
 @app.get("/api/health")
 def health_check():
-    ollama_info = check_ollama_status()
+    planner_info = check_active_planner()
     return {
         "status": "ok",
         "service": "visiionary-server",
         "privacy_shield": "active",
-        "planner": "LOCAL_OLLAMA" if ollama_info["available"] else "LOCAL_SEMANTIC",
-        "model": ollama_info["model"]
+        "planner": planner_info["provider"].upper(),
+        "model": planner_info["model"]
     }
 
 @app.post("/api/agent/plan", response_model=AgentPlanResponse)
 def plan_action(payload: SanitizedContextPackage):
     # -----------------------------------------------------------------------
-    # 1. Defense-in-depth: Scan ONLY human-readable prose text fields for PII.
-    #    We explicitly DO NOT scan element.id or the full JSON dump to avoid
-    #    false positives on opaque DOM identifiers (e.g. Amazon numeric element
-    #    IDs) and base64 screenshot data.
+    # 1. Defense-in-depth: Scan prose text fields for genuine PII leaks.
+    #    A. instruction_sanitized, page URLs, history: strict egress gate (HTTP 400).
+    #    B. elements[...].label: auto-redacted in-place so cloud LLM receives zero PII
+    #       without breaking autonomous browsing on dynamic pages.
     # -----------------------------------------------------------------------
-    text_fields = collect_text_fields_for_scan(payload)
     pii_violations: list[str] = []
+    print(f"[PS26171 DIAGNOSTIC] PLANNER INPUT ELEMENT COUNT: {len(payload.elements)} | REDACTIONS: {len(payload.redactions)} | TASK: \"{payload.instruction_sanitized}\"")
 
-    for field_path, text_value in text_fields:
+    # Wire metadata & instruction checks (must never leak raw PII over the wire)
+    wire_fields: list[tuple[str, str]] = []
+    if payload.instruction_sanitized:
+        wire_fields.append(("instruction_sanitized", payload.instruction_sanitized))
+    if payload.page:
+        if payload.page.url_sanitized:
+            wire_fields.append(("page.url_sanitized", payload.page.url_sanitized))
+        if payload.page.title_sanitized:
+            wire_fields.append(("page.title_sanitized", payload.page.title_sanitized))
+    for i, item in enumerate(payload.history):
+        for key in ("action", "result", "summary"):
+            val = item.get(key) if isinstance(item, dict) else getattr(item, key, None)
+            if isinstance(val, str):
+                wire_fields.append((f"history[{i}].{key}", val))
+
+    for field_path, text_value in wire_fields:
         for pat_name, pattern in SERVER_PII_PROSE_PATTERNS:
             matches = pattern.findall(text_value)
-            leaks = [m for m in matches if "REDACTED" not in m]
+            leaks = [m for m in matches if "REDACTED" not in m and is_genuine_pii(pat_name, m)]
             if leaks:
-                # Log field + pattern — NEVER the raw matched value
-                print(f"[SERVER PRIVACY] PII candidate: field={field_path} type={pat_name} count={len(leaks)}")
+                print(f"[SERVER PRIVACY] Genuine PII in {field_path}: type={pat_name} count={len(leaks)}")
                 pii_violations.append(f"{pat_name} in {field_path}")
 
     if pii_violations:
@@ -156,6 +209,16 @@ def plan_action(payload: SanitizedContextPackage):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Server privacy scanner rejected payload: unredacted pattern detected {pii_violations[:2]}"
         )
+
+    # DOM elements: auto-redact genuine PII in-place before sending to LLM
+    for el in payload.elements:
+        if el.label:
+            for pat_name, pattern in SERVER_PII_PROSE_PATTERNS:
+                matches = pattern.findall(el.label)
+                for m in matches:
+                    if "REDACTED" not in m and is_genuine_pii(pat_name, m):
+                        print(f"[SERVER DEFENSE] Auto-redacted genuine {pat_name} in element {el.id}")
+                        el.label = el.label.replace(m, f"[REDACTED_{pat_name}]")
 
     # -----------------------------------------------------------------------
     # 2. Defense-in-depth: Scan FULL serialized payload for raw vault secrets.
@@ -181,23 +244,21 @@ def plan_action(payload: SanitizedContextPackage):
     from server.app.product_constraints import extract_product_constraints
     product_constraints = payload.product_constraints or extract_product_constraints(payload.instruction_sanitized)
 
-    # 3. Try Local Ollama LLM first (Priority 1)
-    ollama_info = check_ollama_status()
-    if ollama_info["available"]:
-        try:
-            actions, summary, model_name = plan_with_local_llm(payload)
-            return AgentPlanResponse(
-                task=payload.instruction_sanitized,
-                reasoning_summary=summary,
-                actions=actions,
-                subgoals=subgoals,
-                completed_subgoals=completed_subgoals,
-                remaining_goal=remaining_goal,
-                product_constraints=product_constraints,
-                selected_target=payload.selected_target
-            )
-        except Exception as e:
-            print(f"[SERVER] Local Ollama call warning ({e}), falling back to local semantic planner...")
+    # 3. Try Best Autonomous Neural LLM Planner (Groq Cloud API or Local Ollama)
+    try:
+        actions, summary, model_name = plan_with_best_llm(payload)
+        return AgentPlanResponse(
+            task=payload.instruction_sanitized,
+            reasoning_summary=summary,
+            actions=actions,
+            subgoals=subgoals,
+            completed_subgoals=completed_subgoals,
+            remaining_goal=remaining_goal,
+            product_constraints=product_constraints,
+            selected_target=payload.selected_target
+        )
+    except Exception as e:
+        print(f"[SERVER] Neural LLM planner warning ({e}), falling back to local semantic planner...")
 
     # 4. Fallback to Local Semantic Reasoning Planner
     actions, summary = decide_next_action(payload)

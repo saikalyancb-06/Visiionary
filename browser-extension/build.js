@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Build script for PS26171 Chrome Extension
  * Prepares bundle and assets: onnxruntime-web WASM/JS binaries and ONNX model
  */
@@ -13,7 +13,9 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const EXT_DIR = __dirname;
 const PUBLIC_DIR = path.join(EXT_DIR, 'public');
 const ORT_DIST = path.join(EXT_DIR, 'node_modules', 'onnxruntime-web', 'dist');
-const MODEL_SRC = path.join(ROOT_DIR, 'models', 'onnx', 'regularized_visual_pii_detector.onnx');
+const MODEL_SRC = fs.existsSync(path.join(ROOT_DIR, 'models', 'onnx', 'pii_detector.onnx')) 
+  ? path.join(ROOT_DIR, 'models', 'onnx', 'pii_detector.onnx')
+  : path.join(ROOT_DIR, 'models', 'onnx', 'regularized_visual_pii_detector.onnx');
 const PUBLIC_MODELS_DIR = path.join(PUBLIC_DIR, 'models');
 const PUBLIC_ORT_DIR = path.join(PUBLIC_DIR, 'ort');
 

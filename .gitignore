@@ -1,35 +1,71 @@
-﻿# Git ignore for SIH 2026 PS 26171 Browser Agent
+# Git ignore for SIH 2026 PS 26171 Browser Agent
 .venv/
+env/
+venv/
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node.js dependencies & builds
 node_modules/
 dist/
 build/
 .cache/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Large Datasets & Raw Data (Never commit large raw data)
+# Large Datasets & Raw Data (Never commit multi-GB datasets)
 data/raw/
 data/processed/
+data/external/
 *.tar.gz
+*.tar
 *.zip
 *.parquet
+*.arrow
+*.ipc
+*.h5
+*.hdf5
 
-# Model weights
+# Model checkpoints & large binary weights
 models/checkpoints/
+models/onnx/
+browser-extension/public/models/*.onnx
 *.pt
 *.pth
 *.bin
 *.onnx
+*.safetensors
+*.ckpt
+*.tflite
 
-# Environment & Secrets
+# Local pipeline state, experiments & runtime logs
+runs/
+logs/
+*.log
+prompt_*.txt
+*.tmp
+
+# Environment & Secret keys
 .env
-.env.local
+.env.*
+!.env.example
 *.pem
 *.key
+*.cert
+*.p12
 
-# Logs & temp
-logs/*.log
-*.tmp
+# OS generated files & IDE caches
 .DS_Store
 Thumbs.db
+ehthumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

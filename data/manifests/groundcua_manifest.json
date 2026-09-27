@@ -1,0 +1,138 @@
+{
+  "dataset_name": "GroundCUA",
+  "repo_id": "Fhrozen/GroundCUA",
+  "license": "Apache 2.0",
+  "purpose": "UI perception and computer-use grounding across real software applications",
+  "download_timestamp": "2026-09-27 12:31:20",
+  "total_files": 7,
+  "total_size_mb": 822.33,
+  "total_samples": 2431,
+  "files": [
+    {
+      "filename": "7-Zip/train-00000-of-00001.parquet",
+      "local_path": "data\\external\\groundcua\\7-Zip\\train-00000-of-00001.parquet",
+      "size_bytes": 138981666,
+      "size_mb": 132.54,
+      "sha256": "8d3acff837182febbdd587a7f3e95e4999844a84ccd5ad646ad255de113d5140",
+      "num_samples": 498,
+      "columns": [
+        "image_id",
+        "image",
+        "bbox",
+        "text",
+        "category",
+        "ids",
+        "num_boxes"
+      ],
+      "status": "VERIFIED_VALID"
+    },
+    {
+      "filename": "Conky/train-00000-of-00001.parquet",
+      "local_path": "data\\external\\groundcua\\Conky\\train-00000-of-00001.parquet",
+      "size_bytes": 4662095,
+      "size_mb": 4.45,
+      "sha256": "5f38c7460a54c162fc202c8e634220a14ba342686bed6ab3af6751af591a7784",
+      "num_samples": 7,
+      "columns": [
+        "image_id",
+        "image",
+        "bbox",
+        "text",
+        "category",
+        "ids",
+        "num_boxes"
+      ],
+      "status": "VERIFIED_VALID"
+    },
+    {
+      "filename": "OnlyOffice_Forms/train-00000-of-00001.parquet",
+      "local_path": "data\\external\\groundcua\\OnlyOffice_Forms\\train-00000-of-00001.parquet",
+      "size_bytes": 1823303,
+      "size_mb": 1.74,
+      "sha256": "692a0c36862a436efcd260a2c69f2abe9b8a393cf79449aaf000032894743733",
+      "num_samples": 7,
+      "columns": [
+        "image_id",
+        "image",
+        "bbox",
+        "text",
+        "category",
+        "ids",
+        "num_boxes"
+      ],
+      "status": "VERIFIED_VALID"
+    },
+    {
+      "filename": "Brave/train-00000-of-00001.parquet",
+      "local_path": "data\\external\\groundcua\\Brave\\train-00000-of-00001.parquet",
+      "size_bytes": 199935878,
+      "size_mb": 190.67,
+      "sha256": "ddb0208e27562bf334ffd19b06e5f5ee1817697a54d0a7a2a8fae9543b97aeae",
+      "num_samples": 235,
+      "columns": [
+        "image_id",
+        "image",
+        "bbox",
+        "text",
+        "category",
+        "ids",
+        "num_boxes"
+      ],
+      "status": "VERIFIED_VALID"
+    },
+    {
+      "filename": "Bitwarden/train-00000-of-00001.parquet",
+      "local_path": "data\\external\\groundcua\\Bitwarden\\train-00000-of-00001.parquet",
+      "size_bytes": 183369069,
+      "size_mb": 174.87,
+      "sha256": "106b81ae4f46b463a004a4fda384d73c0e29ad0364cbc420e91274d221a3e18d",
+      "num_samples": 679,
+      "columns": [
+        "image_id",
+        "image",
+        "bbox",
+        "text",
+        "category",
+        "ids",
+        "num_boxes"
+      ],
+      "status": "VERIFIED_VALID"
+    },
+    {
+      "filename": "GIMP/train-00000-of-00001.parquet",
+      "local_path": "data\\external\\groundcua\\GIMP\\train-00000-of-00001.parquet",
+      "size_bytes": 187197174,
+      "size_mb": 178.53,
+      "sha256": "37e560d8659aa48217367749b00b4be8c7603cad7a77b83e8670546907517b41",
+      "num_samples": 411,
+      "columns": [
+        "image_id",
+        "image",
+        "bbox",
+        "text",
+        "category",
+        "ids",
+        "num_boxes"
+      ],
+      "status": "VERIFIED_VALID"
+    },
+    {
+      "filename": "Inkscape/train-00000-of-00001.parquet",
+      "local_path": "data\\external\\groundcua\\Inkscape\\train-00000-of-00001.parquet",
+      "size_bytes": 146304907,
+      "size_mb": 139.53,
+      "sha256": "365aab45c654cfee1eabb62cd78b59c9a514d08a04faff907a101cb65268b3cb",
+      "num_samples": 594,
+      "columns": [
+        "image_id",
+        "image",
+        "bbox",
+        "text",
+        "category",
+        "ids",
+        "num_boxes"
+      ],
+      "status": "VERIFIED_VALID"
+    }
+  ]
+}

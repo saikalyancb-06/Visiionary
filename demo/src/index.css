@@ -1,0 +1,235 @@
+/* ─── Google Fonts — must be first ─── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #04040e;
+    color: #ffffff;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Fast paint optimization for below-the-fold content */
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 700px;
+}
+
+/* ──────────────────────────────────────────
+   PLANET ORB HORIZON
+────────────────────────────────────────── */
+.planet-orb {
+  position: absolute;
+  top: 48%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  max-width: 95vw;
+  height: 480px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 25%, #1d4ed8 0%, #1e3a8a 35%, #0a1140 70%, transparent 100%);
+  box-shadow:
+    0 -30px 100px 30px rgba(37, 99, 235, 0.35),
+    0 -10px 50px 15px rgba(56, 189, 248, 0.2),
+    inset 0 30px 60px rgba(96, 165, 250, 0.15);
+  pointer-events: none;
+}
+
+/* ──────────────────────────────────────────
+   AMBIENT GLOW SPOTS (Optimized GPU layer)
+────────────────────────────────────────── */
+.glow-spot {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+.glow-blue-1 {
+  width: 450px; height: 450px;
+  background: radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 70%);
+  top: -60px; left: -60px;
+}
+.glow-blue-2 {
+  width: 380px; height: 380px;
+  background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+  top: 30%; right: -50px;
+}
+.glow-purple-1 {
+  width: 320px; height: 320px;
+  background: radial-gradient(circle, rgba(168,85,247,0.06) 0%, transparent 70%);
+  bottom: 10%; left: 5%;
+}
+
+/* ──────────────────────────────────────────
+   GLASS CARD
+────────────────────────────────────────── */
+.glass-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.glass-card:hover {
+  border-color: rgba(99, 162, 255, 0.25);
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.08);
+}
+
+/* ──────────────────────────────────────────
+   GRADIENT TEXT
+────────────────────────────────────────── */
+.text-gradient-blue {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 40%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.text-gradient-cyan {
+  background: linear-gradient(135deg, #22d3ee 0%, #38bdf8 60%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ──────────────────────────────────────────
+   INTERACTIVE BUTTONS (HIGH CONTRAST & DISTINGUISHABLE)
+────────────────────────────────────────── */
+.btn-action-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #0284c7, #2563eb, #6366f1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 24px rgba(37, 99, 235, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.btn-action-primary:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 32px rgba(56, 189, 248, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.btn-action-primary:active { transform: translateY(0) scale(0.98); }
+.btn-action-primary:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+  border-color: transparent;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-action-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-action-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* ──────────────────────────────────────────
+   ICON BADGES
+────────────────────────────────────────── */
+.icon-badge {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+.icon-badge-blue   { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
+.icon-badge-purple { background: linear-gradient(135deg, #4c1d95, #7c3aed); }
+.icon-badge-cyan   { background: linear-gradient(135deg, #0e7490, #06b6d4); }
+.icon-badge-green  { background: linear-gradient(135deg, #065f46, #059669); }
+.icon-badge-orange { background: linear-gradient(135deg, #92400e, #d97706); }
+.icon-badge-red    { background: linear-gradient(135deg, #7f1d1d, #dc2626); }
+
+/* ──────────────────────────────────────────
+   SCANNER ANIMATION
+────────────────────────────────────────── */
+.scanner-beam {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #38bdf8, #818cf8, transparent);
+  box-shadow: 0 0 14px 3px rgba(56,189,248,0.7);
+  animation: scanbeam 2.2s cubic-bezier(0.4,0,0.6,1) infinite;
+}
+@keyframes scanbeam {
+  0%   { top: 0%; opacity: 0; }
+  5%   { opacity: 1; }
+  92%  { top: 100%; opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.pipe-line-active {
+  background: linear-gradient(90deg, #3b82f6, #6366f1);
+  animation: pipeflow 1.6s ease-in-out infinite;
+}
+@keyframes pipeflow {
+  0%,100% { opacity: 0.5; }
+  50%     { opacity: 1; }
+}
+
+.redact-appear {
+  animation: redactIn 0.35s ease forwards;
+}
+@keyframes redactIn {
+  0%  { opacity: 0; transform: scaleX(0.85); }
+  100%{ opacity: 1; transform: scaleX(1); }
+}
+
+.score-fill {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #3b82f6);
+  transition: width 1s ease-out;
+}
+
+/* ──────────────────────────────────────────
+   PII TAG BADGES
+────────────────────────────────────────── */
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.tag-blue   { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.25); color: #93c5fd; }
+.tag-red    { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.25);  color: #fca5a5; }
+.tag-green  { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25); color: #6ee7b7; }
+.tag-purple { background: rgba(168,85,247,0.12); border: 1px solid rgba(168,85,247,0.25); color: #d8b4fe; }
+.tag-cyan   { background: rgba(6,182,212,0.12);  border: 1px solid rgba(6,182,212,0.25);  color: #67e8f9; }

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Configurable Real Dataset Loaders for PS 26171
 Loads real dataset samples from:
 - WebPII (Parquet shards: image bytes, pii_elements_json bounding boxes and classes)
@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple, Any
 import pandas as pd
 import pyarrow.parquet as pq
 from PIL import Image
+import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -25,19 +26,24 @@ class WebPIIDataset(Dataset):
     """
     WebPII Dataset loader for visual PII bounding boxes & classes.
     """
-    def __init__(self, root_dir: Optional[str] = None, split: str = "test", max_samples: Optional[int] = None, transform=None):
+    def __init__(self, root_dir: Optional[str] = None, split: str = "test", max_samples: Optional[int] = None, transform=None, parquet_file: Optional[Path] = None):
         self.root_dir = Path(root_dir or DEFAULT_DATASET_ROOT) / "webpii" / "data"
         self.transform = transform
         self.samples = []
 
-        if not self.root_dir.exists():
-            print(f"[WebPII] Directory not found: {self.root_dir}")
-            return
+        if parquet_file:
+            parquet_files = [Path(parquet_file)]
+        else:
+            if not self.root_dir.exists():
+                print(f"[WebPII] Directory not found: {self.root_dir}")
+                return
 
-        # Find parquet files for split
-        parquet_files = sorted(list(self.root_dir.glob(f"{split}*.parquet")))
-        if not parquet_files:
-            parquet_files = sorted(list(self.root_dir.glob("*.parquet")))
+            if split == "all":
+                parquet_files = sorted(list(self.root_dir.glob("*.parquet")))
+            else:
+                parquet_files = sorted(list(self.root_dir.glob(f"{split}*.parquet")))
+                if not parquet_files:
+                    parquet_files = sorted(list(self.root_dir.glob("*.parquet")))
 
         print(f"[WebPII] Loading from {len(parquet_files)} parquet shards in {self.root_dir}...")
         for pfile in parquet_files:
@@ -80,7 +86,8 @@ class WebPIIDataset(Dataset):
         orig_w, orig_h = img.size
         # Resize to model input size (320, 320)
         img_resized = img.resize((320, 320))
-        img_tensor = torch.tensor(list(img_resized.getdata()), dtype=torch.float32).view(320, 320, 3).permute(2, 0, 1) / 255.0
+        arr = np.array(img_resized, dtype=np.float32)
+        img_tensor = torch.from_numpy(arr).permute(2, 0, 1) / 255.0
 
         # Parse real PII bounding boxes
         pii_elements = []
@@ -91,20 +98,52 @@ class WebPIIDataset(Dataset):
 
         # Normalized target bbox [x1, y1, x2, y2]
         target_box = [0.0, 0.0, 1.0, 1.0]
-        target_label = 0  # safe / general
+        target_label = 0  # default / background
+
+        PII_KEY_MAP = {
+            "PII_FIRSTNAME": 0, "PII_LASTNAME": 0, "PII_FULLNAME": 0, "PII_FULLNAME2": 0,
+            "PII_EMAIL": 1,
+            "PII_PHONE": 2,
+            "PII_STREET": 3, "PII_STREET2": 3, "PII_CITY": 3, "PII_STATE_ABBR": 3, "PII_CITY_STATE_ZIP": 3, "PII_COUNTRY": 3,
+            "PII_POSTCODE": 4,
+            "PII_DOB": 5, "PII_DATE_OF_BIRTH": 5,
+            "PII_AADHAAR": 6,
+            "PII_PAN": 7,
+            "PII_PASSPORT": 8,
+            "PII_VOTER_ID": 9,
+            "PII_DRIVING_LICENSE": 10,
+            "PII_BANK_ACCOUNT": 11,
+            "PII_IFSC": 12,
+            "PII_UPI": 13, "PII_UPI_ID": 13,
+            "PII_CARD_NUMBER": 14, "PII_CARD_LAST4": 14, "PII_CARD_TYPE": 14, "PII_CARD_EXPIRY": 14, "PII_CARD_CVV": 14,
+            "PII_PASSWORD": 15,
+            "PII_OTP": 16,
+            "PII_GSTIN": 17,
+            "PII_FACE": 18,
+            "PII_QR_BARCODE": 19,
+        }
 
         if pii_elements and len(pii_elements) > 0:
             first = pii_elements[0]
-            # WebPII formats bbox as [x, y, w, h] or [ymin, xmin, ymax, xmax]
-            b = first.get("bbox", [0, 0, orig_w, orig_h])
-            if len(b) == 4:
-                # normalize
-                x1 = max(0.0, min(1.0, b[0] / orig_w if orig_w > 0 else 0.0))
-                y1 = max(0.0, min(1.0, b[1] / orig_h if orig_h > 0 else 0.0))
-                x2 = max(x1, min(1.0, (b[0] + b[2]) / orig_w if orig_w > 0 else 1.0))
-                y2 = max(y1, min(1.0, (b[1] + b[3]) / orig_h if orig_h > 0 else 1.0))
-                target_box = [x1, y1, x2, y2]
-                target_label = 1  # sensitive / PII
+            if "bbox_x" in first:
+                bx = float(first.get("bbox_x", 0))
+                by = float(first.get("bbox_y", 0))
+                bw = float(first.get("bbox_width", orig_w))
+                bh = float(first.get("bbox_height", orig_h))
+            elif "bbox" in first:
+                b = first["bbox"]
+                bx, by, bw, bh = float(b[0]), float(b[1]), float(b[2]), float(b[3])
+            else:
+                bx, by, bw, bh = 0.0, 0.0, float(orig_w), float(orig_h)
+
+            x1 = max(0.0, min(1.0, bx / orig_w if orig_w > 0 else 0.0))
+            y1 = max(0.0, min(1.0, by / orig_h if orig_h > 0 else 0.0))
+            x2 = max(x1, min(1.0, (bx + bw) / orig_w if orig_w > 0 else 1.0))
+            y2 = max(y1, min(1.0, (by + bh) / orig_h if orig_h > 0 else 1.0))
+            target_box = [x1, y1, x2, y2]
+
+            k = str(first.get("key", ""))
+            target_label = PII_KEY_MAP.get(k, 3)
 
         return {
             "image": img_tensor,
@@ -165,8 +204,8 @@ class ScreenSpotDataset(Dataset):
             img = Image.new("RGB", (320, 320), color="white")
 
         orig_w, orig_h = img.size
-        img_resized = img.resize((320, 320))
-        img_tensor = torch.tensor(list(img_resized.getdata()), dtype=torch.float32).view(320, 320, 3).permute(2, 0, 1) / 255.0
+        arr = np.array(img_resized, dtype=np.float32)
+        img_tensor = torch.from_numpy(arr).permute(2, 0, 1) / 255.0
 
         b = s["bbox"]
         x1 = max(0.0, min(1.0, b[0] / orig_w if orig_w > 0 else 0.0))

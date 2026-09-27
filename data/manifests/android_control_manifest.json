@@ -1,0 +1,84 @@
+{
+  "dataset_name": "AndroidControl",
+  "repo_id": "xwm/AndroidControl",
+  "license": "CC-BY-4.0",
+  "purpose": "Screen states, UI positions, action labels, multi-step trajectories",
+  "download_timestamp": "2026-09-27 12:31:23",
+  "total_files": 3,
+  "total_size_mb": 1237.57,
+  "total_samples": 1695,
+  "files": [
+    {
+      "filename": "data/train-00000-of-00018.parquet",
+      "local_path": "data\\external\\android_control\\data\\train-00000-of-00018.parquet",
+      "size_bytes": 407886257,
+      "size_mb": 388.99,
+      "sha256": "7deed23133d2701b19bc8ee0b8be7b4e89862262a120d0dd236bba041807d612",
+      "num_samples": 565,
+      "columns": [
+        "episode_id",
+        "step_id",
+        "episode_length",
+        "goal",
+        "instruction",
+        "image_width",
+        "image_height",
+        "image_base64",
+        "image_path",
+        "ui_positions",
+        "action",
+        "subset",
+        "history_list"
+      ],
+      "status": "VERIFIED_VALID"
+    },
+    {
+      "filename": "data/train-00001-of-00018.parquet",
+      "local_path": "data\\external\\android_control\\data\\train-00001-of-00018.parquet",
+      "size_bytes": 438329623,
+      "size_mb": 418.02,
+      "sha256": "430bb2e50a925e93e41a6f05a20bc6cbb74e97b860839fb280798e18d405c577",
+      "num_samples": 565,
+      "columns": [
+        "episode_id",
+        "step_id",
+        "episode_length",
+        "goal",
+        "instruction",
+        "image_width",
+        "image_height",
+        "image_base64",
+        "image_path",
+        "ui_positions",
+        "action",
+        "subset",
+        "history_list"
+      ],
+      "status": "VERIFIED_VALID"
+    },
+    {
+      "filename": "data/train-00002-of-00018.parquet",
+      "local_path": "data\\external\\android_control\\data\\train-00002-of-00018.parquet",
+      "size_bytes": 451472169,
+      "size_mb": 430.56,
+      "sha256": "487b3f969288dc0a1ffdc7b5b3ca7f85403a34a368ef1b8cad5aea8d679dd163",
+      "num_samples": 565,
+      "columns": [
+        "episode_id",
+        "step_id",
+        "episode_length",
+        "goal",
+        "instruction",
+        "image_width",
+        "image_height",
+        "image_base64",
+        "image_path",
+        "ui_positions",
+        "action",
+        "subset",
+        "history_list"
+      ],
+      "status": "VERIFIED_VALID"
+    }
+  ]
+}

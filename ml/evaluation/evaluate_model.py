@@ -1,4 +1,4 @@
-﻿"""
+"""
 Evaluation Pipeline on Real Datasets (Phase 14)
 Measures genuine Precision, Recall, F1, IoU, and Inference Latency on real WebPII samples.
 Zero hardcoding or fabrication.
@@ -7,7 +7,10 @@ import torch
 import numpy as np
 import time
 import json
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 from ml.datasets.loaders import WebPIIDataset
 from ml.training.train_real import RegularizedVisualPIIDetector
 

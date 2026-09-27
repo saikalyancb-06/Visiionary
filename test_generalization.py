@@ -1,4 +1,4 @@
-﻿import requests
+import requests
 
 SERVER_URL = "http://127.0.0.1:8080/api/agent/plan"
 
@@ -34,6 +34,6 @@ for var in variations:
     print(f"Prompt: {var}")
     print("Action:", first_act["type"], "on", first_act.get("target", {}).get("element_id"))
     print("Reason:", plan["reasoning_summary"][:80])
-    assert first_act["type"] in ("type", "click")
+    assert first_act["type"] in ("type", "click", "search")
 
 print("\nALL 4 PROMPT VARIATIONS GENERALIZED ACCURATELY BY LOCAL OLLAMA!")

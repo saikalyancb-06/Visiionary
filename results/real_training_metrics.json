@@ -2,16 +2,15 @@
   "metrics": [
     {
       "epoch": 1,
-      "train_loss": 3.132,
-      "val_loss": 3.1163,
-      "mean_iou": 0.0
-    },
-    {
-      "epoch": 2,
-      "train_loss": 2.9824,
-      "val_loss": 3.1034,
-      "mean_iou": 0.0
+      "train_loss": 0.5543,
+      "val_loss": 1.1649,
+      "mean_iou": 0.0001,
+      "precision": 0.9331,
+      "recall": 1.0,
+      "f1_score": 0.9654,
+      "samples_trained": 40384
     }
   ],
-  "duration_s": 2.7699179649353027
+  "duration_s": 1167.2410571575165,
+  "total_samples": 40384
 }

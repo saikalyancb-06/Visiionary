@@ -3,6 +3,19 @@
  * Self-contained for Chrome MV3 content script environment (no static ES module import errors in page context).
  */
 
+(function() {
+  if (window.__PS26171_CONTENT_INITIALIZED__) {
+    return;
+  }
+  window.__PS26171_CONTENT_INITIALIZED__ = true;
+
+// --- IDEMPOTENCY GUARD ---
+// Content scripts can be injected multiple times (e.g. on SPA navigations, programmatic
+// re-injection from background.js, or manifest match + executeScript overlap).
+// Guard against re-declaration of top-level const/let/class names which would throw
+// "Identifier X has already been declared" SyntaxErrors on the second injection.
+
+
 // --- SECTION 1: PII REGEX & DOM PRIVACY DETECTOR ---
 const PII_PATTERNS = {
   EMAIL: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
@@ -519,13 +532,21 @@ function extractDOMContext(documentObj) {
 // --- SECTION 3: REAL ACTION EXECUTOR ---
 function findTargetElement(target) {
   if (!target) return null;
-  if (target.element_id) {
-    const el = document.getElementById(target.element_id);
+  const targetId = typeof target === 'string' ? target : (target.element_id || '');
+  if (targetId) {
+    let el = document.getElementById(targetId);
     if (el) return el;
-    const byName = document.querySelector(`[name="${target.element_id}"]`);
-    if (byName) return byName;
-    const byTestId = document.querySelector(`[data-testid="${target.element_id}"]`);
-    if (byTestId) return byTestId;
+    el = document.querySelector(`[name="${targetId}"]`);
+    if (el) return el;
+    if (targetId.startsWith('name_')) {
+      const rawName = targetId.substring(5);
+      el = document.querySelector(`[name="${rawName}"]`);
+      if (el) return el;
+    }
+    el = document.querySelector(`[data-testid="${targetId}"]`);
+    if (el) return el;
+    el = document.querySelector(`[aria-label="${targetId}"]`);
+    if (el) return el;
   }
   if (target.selector) {
     const el = document.querySelector(target.selector);
@@ -534,6 +555,11 @@ function findTargetElement(target) {
   if (target.xpath) {
     const res = document.evaluate(target.xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     if (res.singleNodeValue) return res.singleNodeValue;
+  }
+  // Generic fallback for search inputs if target was search-related
+  if (typeof targetId === 'string' && /search/i.test(targetId)) {
+    const searchInput = document.querySelector('input[name="q"], input[type="search"], input[title*="Search" i], input[placeholder*="Search" i], input[aria-label*="Search" i]');
+    if (searchInput) return searchInput;
   }
   return null;
 }
@@ -682,18 +708,29 @@ async function executeAction(action) {
       el.dispatchEvent(new Event('focus', { bubbles: true }));
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
-      el.dispatchEvent(new KeyboardEvent('keypress', { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
-      el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
 
-      // If inside a form and enter key is pressed, submit form if not already submitted
-      if (el.form && typeof el.form.requestSubmit === 'function') {
+      const enterOpts = { bubbles: true, cancelable: true, view: window, key: 'Enter', code: 'Enter', keyCode: 13, which: 13, charCode: 13 };
+      el.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
+      el.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
+      el.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
+
+      // Also look for an adjacent search icon/button or submit form
+      const formEl = el.form || el.closest('form');
+      if (formEl && typeof formEl.requestSubmit === 'function') {
         try {
-          el.form.requestSubmit();
+          formEl.requestSubmit();
         } catch (_) {}
+      } else {
+        // Look for proximate search button or anchor
+        const searchBtn = el.parentElement?.querySelector('button, a, [role="button"]') ||
+                          el.closest('header, nav, [role="banner"], [role="search"]')?.querySelector('button, [role="button"]');
+        if (searchBtn && /search|find|go/i.test(searchBtn.innerText || searchBtn.getAttribute('aria-label') || '')) {
+          try { searchBtn.click(); } catch (_) {}
+        }
       }
 
       return { success: true, message: `Typed into element: ${el.id || el.tagName}` };
+
     }
 
     case 'search': {
@@ -702,13 +739,50 @@ async function executeAction(action) {
       const textToType = action.value?.text || action.text || '';
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.focus();
-      el.value = textToType;
+
+      // Support React 16+ / Vue input value tracker
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value'
+      )?.set;
+      const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        'value'
+      )?.set;
+
+      if (el.tagName === 'INPUT' && nativeInputValueSetter) {
+        nativeInputValueSetter.call(el, textToType);
+      } else if (el.tagName === 'TEXTAREA' && nativeTextAreaValueSetter) {
+        nativeTextAreaValueSetter.call(el, textToType);
+      } else {
+        el.value = textToType;
+      }
+
+      el.dispatchEvent(new Event('focus', { bubbles: true }));
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', code: 'Enter', keyCode: 13 }));
-      if (el.form && typeof el.form.requestSubmit === 'function') {
-        try { el.form.requestSubmit(); } catch (_) {}
+
+      const enterOpts = { bubbles: true, cancelable: true, view: window, key: 'Enter', code: 'Enter', keyCode: 13, which: 13, charCode: 13 };
+      el.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
+      el.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
+      el.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
+
+      // Also look for an adjacent search icon/button or submit form
+      const formEl = el.form || el.closest('form');
+      if (formEl && typeof formEl.requestSubmit === 'function') {
+        try {
+          formEl.requestSubmit();
+        } catch (_) {
+          try { formEl.submit(); } catch (_) {}
+        }
+      } else {
+        const searchBtn = el.parentElement?.querySelector('button, [type="submit"], svg') ||
+                          el.closest('header, nav, [role="banner"], [role="search"], form')?.querySelector('button, [type="submit"]');
+        if (searchBtn) {
+          try { searchBtn.click(); } catch (_) {}
+        }
       }
+
       return { success: true, message: `Searched for "${textToType}" in element ${el.id || el.tagName}` };
     }
 
@@ -755,11 +829,67 @@ async function executeAction(action) {
     }
 
     case 'scroll': {
-      const deltaY = action.amount || action.milliseconds || action.deltaY || 400;
+      const deltaY = action.amount || action.milliseconds || action.deltaY || 500;
       const dir = (action.direction || 'down').toLowerCase();
       const scrollAmt = dir === 'up' ? -Math.abs(deltaY) : Math.abs(deltaY);
-      window.scrollBy({ top: scrollAmt, behavior: 'smooth' });
-      return { success: true, message: `Scrolled window ${dir} by ${Math.abs(scrollAmt)}px` };
+
+      // 1. Identify primary scroll target (window, documentElement, body, or inner scrollable container)
+      const findScrollableContainer = () => {
+        // First check active element or focused container
+        const active = document.activeElement;
+        if (active && active !== document.body && (active.scrollHeight > active.clientHeight + 20)) {
+          const overflow = window.getComputedStyle(active).overflowY;
+          if (overflow === 'auto' || overflow === 'scroll') return active;
+        }
+
+        // Check common scroll containers (main, [role="main"], article, .content, #content, virtual lists)
+        const candidates = document.querySelectorAll('main, [role="main"], [data-scrollable], .scrollable, [class*="scroll"], [class*="list"], article, div');
+        for (const el of candidates) {
+          if (el.scrollHeight > el.clientHeight + 40 && el.clientHeight > 200) {
+            const style = window.getComputedStyle(el);
+            if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+              return el;
+            }
+          }
+        }
+        return null;
+      };
+
+      const container = findScrollableContainer();
+      let scrollSuccess = false;
+
+      if (container) {
+        container.scrollBy({ top: scrollAmt, behavior: 'instant' });
+        container.dispatchEvent(new Event('scroll', { bubbles: true }));
+        scrollSuccess = true;
+      }
+
+      // Also scroll window / documentElement / body
+      const beforeY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+      window.scrollBy({ top: scrollAmt, behavior: 'instant' });
+      document.documentElement.scrollTop += scrollAmt;
+      document.body.scrollTop += scrollAmt;
+      const afterY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+
+      // Dispatch wheel / scroll event to wake up virtual-dom or infinite-scroll listeners
+      window.dispatchEvent(new Event('scroll', { bubbles: true }));
+      document.dispatchEvent(new Event('scroll', { bubbles: true }));
+      try {
+        const wheelEv = new WheelEvent('wheel', { deltaY: scrollAmt, bubbles: true, cancelable: true });
+        window.dispatchEvent(wheelEv);
+      } catch (_) {}
+
+      // Settle wait so DOM renders newly visible elements
+      await new Promise(r => setTimeout(r, 450));
+
+      return {
+        success: true,
+        action_executed: true,
+        scrolled_container: Boolean(container),
+        delta_y: scrollAmt,
+        y_changed: afterY !== beforeY,
+        message: `Scrolled ${dir} by ${Math.abs(scrollAmt)}px (window Y: ${beforeY} -> ${afterY})`
+      };
     }
 
     case 'wait': {
@@ -803,6 +933,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // Draw visible overlay boxes on the page for every hidden element
       renderPrivacyOverlays(snapshot.sensitiveDOM, snapshot.elements);
 
+      console.log(`[PS26171 DIAGNOSTIC] OBSERVATION ELEMENT COUNT: ${snapshot.elements.length} | REDACTIONS: ${snapshot.redactions.length} | URL: ${window.location.href}`);
+
       sendResponse({
         success: true,
         url: window.location.href,
@@ -833,4 +965,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-console.log('[PS26171] Privacy Agent Content Script initialized successfully on:', window.location.href);
+// Clear the idempotency flag when the document is unloaded so that SPA
+// navigations (which reuse the same window object) allow the script to
+// reinitialise correctly after a full page transition.
+window.addEventListener('pagehide', () => {
+  delete window.__PS26171_CONTENT_INITIALIZED__;
+});
+
+console.log('[PS26171 DIAGNOSTIC] CONTENT SCRIPT INITIALIZATION STATUS: SUCCESS | URL: ' + window.location.href);
+})();
