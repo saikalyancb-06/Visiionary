@@ -989,7 +989,7 @@
       }
     };
 
-    let currentWorkflow = 'custom';
+    let currentWorkflow = 'upi';
     let showBoundingBoxes = true;
     let isAttackActive = false;
 
@@ -1001,7 +1001,7 @@
     // Render the sandbox form — tags start as "SCANNING…"
     // ─────────────────────────────────────────────────────────────
     function renderApp() {
-      const wf = WORKFLOWS[currentWorkflow] || WORKFLOWS.custom;
+      const wf = WORKFLOWS[currentWorkflow] || WORKFLOWS.upi;
       const root = document.getElementById('sandbox-root');
 
       let templateMenuHtml = '';

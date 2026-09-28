@@ -8,15 +8,15 @@ import {
 import TaxonomyMatrixModal from './TaxonomyMatrixModal'
 
 const WORKFLOW_TABS = [
-  { id: 'custom', label: '✍️ Judge Live Sandbox (Empty Form)', icon: '✏️' },
   { id: 'upi', label: '⚡ UPI Checkout', icon: '💳' },
   { id: 'govt', label: '🇮🇳 Govt Portal', icon: '🏛️' },
   { id: 'refund', label: '🏦 Refund & Banking', icon: '💰' },
   { id: 'search', label: '🛒 Product Search', icon: '🔍' },
+  { id: 'custom', label: '✍️ Judge Live Sandbox (Manual Entry)', icon: '✏️' },
 ]
 
 export default function LivePerceptionSandbox() {
-  const [selectedWorkflow, setSelectedWorkflow] = useState('custom')
+  const [selectedWorkflow, setSelectedWorkflow] = useState('upi')
   const [pipelineData, setPipelineData] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [activeTab, setActiveTab] = useState('safe-payload') // 'safe-payload' | 'visual-mask' | 'network-stream' | 'wire-telemetry' | 'json'
