@@ -1,11 +1,8 @@
-import { useState } from 'react'
 import Starfield from './components/Starfield'
 import Header from './components/Header'
-import ScenarioTabs from './components/ScenarioTabs'
-import SideBySideView from './components/SideBySideView'
-import PipelineFlow from './components/PipelineFlow'
+import LivePerceptionSandbox from './components/LivePerceptionSandbox'
 import BenchmarkTable from './components/BenchmarkTable'
-import { SCENARIOS } from './data/scenarios'
+import EmpiricalStatsDashboard from './components/EmpiricalStatsDashboard'
 
 // ── Genuine Datasets & Physical Storage ──────────────────────────
 const DATASET_STATS = [
@@ -22,9 +19,9 @@ const KEY_METRICS = [
   { num: '169 GB', label: 'Verified UI Data', sub: '246 Parquet shards downloaded locally' },
   { num: '96.8%', label: 'PII Detection Recall', sub: '26 sensitive entity categories identified' },
   { num: '0.0%', label: 'PII Leakage Rate', sub: '10/10 workflows verified zero network egress' },
+  { num: '19,299', label: 'India Post PINs', sub: '100% verified official postal registry' },
   { num: '1.75 MB', label: 'Model Footprint', sub: 'Exported lightweight ONNX for browser runtime' },
   { num: '11.2 ms', label: 'WebGPU Perception', sub: 'Sub-frame client inference on laptop GPU' },
-  { num: '100%', label: 'Action Accuracy', sub: '9 action categories grounded with exact precision' },
 ]
 
 const FEATURES_LIST = [
@@ -55,85 +52,6 @@ const FEATURES_LIST = [
 ]
 
 export default function App() {
-  const [scenariosList, setScenariosList] = useState(SCENARIOS)
-  const [activeScenarioId, setActiveScenarioId] = useState(SCENARIOS[0].id)
-  
-  const [isScanning, setIsScanning] = useState(false)
-  const [scanDone, setScanDone] = useState(false)
-  const [activeStep, setActiveStep] = useState(-1)
-  const [showRedacted, setShowRedacted] = useState(false)
-  
-  // Autonomous agent execution state
-  const [isAgentDispatched, setIsAgentDispatched] = useState(false)
-  const [agentOutput, setAgentOutput] = useState(null)
-
-  const activeScenario = scenariosList.find(s => s.id === activeScenarioId) || scenariosList[0]
-
-  const handleSelectScenario = (selected) => {
-    setActiveScenarioId(selected.id)
-    setIsScanning(false)
-    setScanDone(false)
-    setActiveStep(-1)
-    setShowRedacted(false)
-    setIsAgentDispatched(false)
-    setAgentOutput(null)
-  }
-
-  const handleFieldValueChange = (fieldId, newValue) => {
-    setScenariosList(prev => prev.map(sc => {
-      if (sc.id !== activeScenarioId) return sc
-      return {
-        ...sc,
-        fields: sc.fields.map(f => f.id === fieldId ? { ...f, value: newValue } : f)
-      }
-    }))
-    setShowRedacted(false)
-    setScanDone(false)
-    setIsAgentDispatched(false)
-    setAgentOutput(null)
-  }
-
-  const runAgentPipeline = () => {
-    if (isScanning) return
-    setIsScanning(true)
-    setScanDone(false)
-    setActiveStep(0)
-    setShowRedacted(false)
-    setIsAgentDispatched(false)
-    setAgentOutput(null)
-
-    const steps = [0, 1, 2, 3, 4, 5]
-    steps.forEach((step, i) => {
-      setTimeout(() => {
-        setActiveStep(step)
-        if (step === 3) {
-          setShowRedacted(true)
-        }
-      }, i * 550)
-    })
-
-    setTimeout(() => {
-      setIsScanning(false)
-      setScanDone(true)
-      setIsAgentDispatched(true)
-      setAgentOutput({
-        actionType: activeScenario.agentAction.type,
-        target: activeScenario.agentAction.target,
-        latency: activeScenario.latency,
-        log: `Agent executed action [${activeScenario.agentAction.type}] targeting [${activeScenario.agentAction.target}]. All PII tokens remained client-side. Zero sensitive telemetry leaked.`
-      })
-    }, steps.length * 550 + 200)
-  }
-
-  const resetAll = () => {
-    setIsScanning(false)
-    setScanDone(false)
-    setActiveStep(-1)
-    setShowRedacted(false)
-    setIsAgentDispatched(false)
-    setAgentOutput(null)
-  }
-
   const scrollToDemo = () => {
     const el = document.getElementById('demo')
     if (el) el.scrollIntoView({ behavior: 'smooth' })
@@ -157,8 +75,6 @@ export default function App() {
         id="hero"
         className="relative min-h-screen flex flex-col justify-between items-center text-center px-4 pt-16 pb-6 overflow-hidden z-10"
       >
-        {/* Planet Orb Arch */}
-        <div className="planet-orb" />
 
         {/* Top/Center Hero Area */}
         <div className="relative z-10 max-w-4xl mx-auto space-y-3 my-auto">
@@ -224,107 +140,12 @@ export default function App() {
           ─────────────────────────────────────────────────────────── */}
       <div className="content-auto space-y-12 pb-16">
 
-        {/* ── 1. INTERACTIVE LIVE DEMO ── */}
+        {/* ── 1. REAL-TIME LOCAL PERCEPTION & EGRESS GATEWAY SANDBOX ── */}
         <section
           id="demo"
-          className="relative z-10 max-w-6xl mx-auto px-4 pt-12 space-y-5"
+          className="relative z-10 max-w-6xl mx-auto px-4 pt-8"
         >
-          {/* Header row */}
-          <div className="border-b border-white/[0.06] pb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase font-bold tracking-widest text-cyan-400">Interactive Execution Engine</span>
-              <span className="tag tag-blue text-[9px]">Live WebGPU Sandbox</span>
-            </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight mt-1">
-              Side-by-Side Egress & Autonomous Agent Execution
-            </h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Inspect what the agent perceives locally vs. what the egress gate sanitizes before web transit.
-            </p>
-          </div>
-
-          {/* Full-width Dedicated Scenario Tabs Row (Never wraps awkwardly) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-gray-400">
-              <span className="font-semibold text-gray-200 flex items-center gap-1.5">
-                <span className="text-cyan-400">👉</span>
-                <span>Select Target Workflow Scenario:</span>
-              </span>
-              <span className="text-[11px] text-gray-500 hidden sm:inline">
-                Click any scenario tab to switch active test
-              </span>
-            </div>
-
-            <ScenarioTabs
-              scenarios={scenariosList}
-              active={activeScenario}
-              onSelect={handleSelectScenario}
-            />
-          </div>
-
-          {/* Execution Controls Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-4 bg-white/[0.02] border border-white/[0.08] p-3.5 rounded-2xl relative shadow-lg">
-            <div className="flex items-center gap-3 flex-wrap">
-              <button
-                onClick={runAgentPipeline}
-                disabled={isScanning}
-                className="btn-action-primary text-xs py-2.5 px-6 cursor-pointer"
-              >
-                {isScanning ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Agent Executing Workflow...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>🚀</span>
-                    <span>Dispatch Autonomous Agent</span>
-                  </>
-                )}
-              </button>
-
-              {!isScanning && !scanDone && (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/70 border border-cyan-400/30 text-cyan-300 text-xs font-medium">
-                  <span>👈</span>
-                  <span>Click to run this scenario</span>
-                </div>
-              )}
-
-              {scanDone && (
-                <button
-                  onClick={resetAll}
-                  className="btn-action-secondary"
-                >
-                  ↺ Reset Test
-                </button>
-              )}
-
-              {scanDone && (
-                <span className="text-xs text-emerald-400 flex items-center gap-1 font-medium bg-emerald-950/40 border border-emerald-500/20 px-3 py-1 rounded-full">
-                  <span>✓</span>
-                  <span>Egress Protected: {activeScenario.piiBlocked} entities blocked</span>
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3 text-xs text-gray-400">
-              <span className="text-gray-500">Benchmark Reference:</span>
-              <span className="text-white font-medium">{activeScenario.workflow} · {activeScenario.label}</span>
-              <span className="text-gray-600">|</span>
-              <span className="text-emerald-400 font-mono">{activeScenario.latency}</span>
-            </div>
-          </div>
-
-          {/* Side-by-Side Screen */}
-          <SideBySideView
-            scenario={activeScenario}
-            isScanning={isScanning}
-            showRedacted={showRedacted}
-            scanDone={scanDone}
-            isAgentDispatched={isAgentDispatched}
-            agentOutput={agentOutput}
-            onFieldValueChange={handleFieldValueChange}
-          />
+          <LivePerceptionSandbox />
         </section>
 
         {/* ── 2. DATASETS TABLE (169 GB STORAGE) ── */}
@@ -396,15 +217,16 @@ export default function App() {
           </div>
         </section>
 
-        {/* ── 4. EXECUTION PIPELINE TRACE ── */}
+
+        {/* ── 4. EMPIRICAL EVALUATION & COMPREHENSIVE BENCHMARK STATISTICS ── */}
         <section
-          id="pipeline"
+          id="statistics"
           className="relative z-10 max-w-6xl mx-auto px-4"
         >
-          <PipelineFlow activeStep={activeStep} isScanning={isScanning} />
+          <EmpiricalStatsDashboard />
         </section>
 
-        {/* ── 5. VERIFICATION BENCHMARK TABLE ONLY (NO DASHBOARD) ── */}
+        {/* ── 5. VERIFICATION BENCHMARK TABLE ── */}
         <section
           id="benchmark"
           className="relative z-10 max-w-6xl mx-auto px-4"

@@ -41,6 +41,7 @@ browser-extension/public/models/*.onnx
 *.pth
 *.bin
 *.onnx
+!demo/public/models/*.onnx
 *.safetensors
 *.ckpt
 *.tflite

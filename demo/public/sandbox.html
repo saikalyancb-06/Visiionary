@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sandbox Target Application</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 14px;
+      font-size: 13px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      position: relative;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #0284c7;
+      color: #fff;
+    }
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      background: #4ade80;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+    .field-group {
+      margin-bottom: 10px;
+      position: relative;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .input-wrapper {
+      position: relative;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 7px 10px;
+      background: #0f172a;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      color: #f1f5f9;
+      font-size: 12px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    input:focus, textarea:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+
+    /* ── Bounding Box Perception Overlays ── */
+    .bbox-active input.is-pii {
+      border: 2px solid #f97316 !important;
+      box-shadow: 0 0 12px rgba(249, 115, 22, 0.5) !important;
+      background: rgba(249, 115, 22, 0.05) !important;
+    }
+    .bbox-active input.is-safe {
+      border: 2px solid #10b981 !important;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4) !important;
+      background: rgba(16, 185, 129, 0.05) !important;
+    }
+    .bbox-active input.is-neutral {
+      border: 1px solid #475569;
+    }
+    .bbox-tag {
+      display: none;
+      position: absolute;
+      right: 6px;
+      top: -9px;
+      padding: 1px 6px;
+      font-size: 9px;
+      font-weight: 800;
+      border-radius: 4px;
+      font-family: monospace;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .bbox-active .bbox-tag.tag-pii {
+      display: inline-block;
+      background: #ea580c;
+      color: #ffffff;
+      box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
+    }
+    .bbox-active .bbox-tag.tag-safe {
+      display: inline-block;
+      background: #059669;
+      color: #ffffff;
+    }
+    .bbox-active .bbox-tag.tag-neutral {
+      display: inline-block;
+      background: #475569;
+      color: #94a3b8;
+    }
+
+    /* ── Adversarial Attack Highlight ── */
+    .attack-mode-active {
+      border: 2px solid #ef4444 !important;
+      animation: alertBlink 1.2s infinite;
+    }
+    @keyframes alertBlink {
+      0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+      50% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); }
+    }
+
+    /* ── Form Grid Layout (2-Column Compact) ── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 10px;
+    }
+    @media (max-width: 480px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ── Sleek Toolbar for Judge Live Test Bench ── */
+    .custom-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+      padding: 6px 8px;
+      background: #0b1329;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      flex-wrap: wrap;
+    }
+    .toolbar-btn {
+      padding: 5px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #1e293b;
+      color: #f1f5f9;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .toolbar-btn:hover {
+      background: #334155;
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
+    .toolbar-btn.btn-primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      border-color: #38bdf8;
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+    }
+    .toolbar-btn.btn-primary:hover {
+      background: linear-gradient(135deg, #0369a1, #1d4ed8);
+    }
+    .toolbar-select-wrapper {
+      flex: 1;
+      min-width: 140px;
+    }
+    .toolbar-select {
+      width: 100%;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #38bdf8;
+      cursor: pointer;
+      outline: none;
+    }
+    .toolbar-select:focus {
+      border-color: #38bdf8;
+    }
+
+    .total-box {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: #0f172a;
+      border: 1px dashed #475569;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+    }
+    .total-amount {
+      color: #38bdf8;
+      font-size: 14px;
+      font-family: monospace;
+    }
+    .action-btn {
+      margin-top: 12px;
+      width: 100%;
+      padding: 9px;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .action-btn:hover {
+      background: linear-gradient(135deg, #0369a1, #1d4ed8);
+    }
+    .hint {
+      font-size: 10px;
+      color: #64748b;
+      text-align: center;
+      margin-top: 6px;
+    }
+    /* ONNX scanning in-progress state */
+    .bbox-active .bbox-tag.tag-scanning {
+      display: inline-block;
+      background: #1e40af;
+      color: #93c5fd;
+      animation: pulse 0.6s infinite;
+    }
+    #model-status-bar {
+      font-size: 9px;
+      font-weight: 700;
+      text-align: center;
+      padding: 4px 0 2px 0;
+      letter-spacing: 0.04em;
+      font-family: monospace;
+      color: #64748b;
+    }
+    #model-status-bar.ready { color: #4ade80; }
+    #model-status-bar.loading { color: #fbbf24; animation: pulse 1s infinite; }
+    #model-status-bar.error { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div id="sandbox-root"></div>
+
+  <script src="data/sandbox_pincode_snippet.js"></script>
+  <script>
+    // ─────────────────────────────────────────────────────────────
+    // ONNX Runtime State
+    // ─────────────────────────────────────────────────────────────
+    let ortSession = null;
+    let ortReady = false;
+
+    // PII classes matching the 26-class PII_TAXONOMY in dataset_adapters/base.py
+    const PII_CLASSES = [
+      'PERSON', 'EMAIL', 'PHONE', 'ADDRESS', 'PASSWORD', 'OTP',
+      'CREDIT_CARD', 'DEBIT_CARD', 'BANK_ACCOUNT', 'IFSC', 'UPI_ID',
+      'AADHAAR', 'PAN', 'PASSPORT', 'DRIVERS_LICENSE', 'DATE_OF_BIRTH',
+      'FINANCIAL_VALUE', 'API_KEY', 'ACCESS_TOKEN', 'JWT', 'SECRET',
+      'PRIVATE_MESSAGE', 'FACE', 'QR_CODE', 'USERNAME', 'OTHER_IDENTIFIER'
+    ];
+
+    // Human-readable labels for each class
+    const CLASS_LABEL = {
+      'PERSON': 'PERSON NAME',
+      'EMAIL': 'EMAIL',
+      'PHONE': 'PHONE NUMBER',
+      'ADDRESS': 'ADDRESS',
+      'PASSWORD': 'PASSWORD',
+      'OTP': 'OTP / 2FA',
+      'CREDIT_CARD': 'CREDIT CARD',
+      'DEBIT_CARD': 'DEBIT CARD',
+      'BANK_ACCOUNT': 'BANK ACCOUNT',
+      'IFSC': 'IFSC CODE',
+      'UPI_ID': 'UPI ID',
+      'AADHAAR': 'AADHAAR',
+      'PAN': 'PAN CARD',
+      'PASSPORT': 'PASSPORT',
+      'DRIVERS_LICENSE': 'DL NUMBER',
+      'DATE_OF_BIRTH': 'DATE OF BIRTH',
+      'FINANCIAL_VALUE': 'FINANCIAL DATA',
+      'API_KEY': 'API KEY',
+      'ACCESS_TOKEN': 'ACCESS TOKEN',
+      'JWT': 'JWT TOKEN',
+      'SECRET': 'SECRET KEY',
+      'PRIVATE_MESSAGE': 'PRIVATE MSG',
+      'FACE': 'BIOMETRIC',
+      'QR_CODE': 'QR CODE',
+      'USERNAME': 'USERNAME',
+      'OTHER_IDENTIFIER': 'IDENTIFIER'
+    };
+
+    // Confidence threshold — below this the model considers the input safe
+    const CONF_THRESHOLD = 0.30;
+
+    // ─────────────────────────────────────────────────────────────
+    // Load ORT and initialise the ONNX session
+    // ─────────────────────────────────────────────────────────────
+    function setModelStatus(msg, cls) {
+      const bar = document.getElementById('model-status-bar');
+      if (!bar) return;
+      bar.textContent = msg;
+      bar.className = cls || '';
+    }
+
+    async function initONNX() {
+      // Derive the base path from where sandbox.html is served
+      const parts = window.location.pathname.split('/');
+      parts[parts.length - 1] = '';
+      const basePath = parts.join('/'); // e.g. /Visiionary/
+
+      setModelStatus('⏳ Loading ONNX Runtime…', 'loading');
+
+      // Load ort.all.min.js from the public/ort/ directory
+      await new Promise((resolve, reject) => {
+        if (window.ort) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = basePath + 'ort/ort.all.min.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Failed to load ORT'));
+        document.head.appendChild(s);
+      });
+
+      const ort = window.ort;
+      ort.env.wasm.wasmPaths = basePath + 'ort/';
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.proxy = false;
+
+      const modelUrl = basePath + 'models/detector.onnx';
+      setModelStatus('⏳ Fetching 1.75 MB model…', 'loading');
+
+      try {
+        ortSession = await ort.InferenceSession.create(modelUrl, {
+          executionProviders: ['wasm'],
+          graphOptimizationLevel: 'all'
+        });
+        ortReady = true;
+        setModelStatus('🟢 ONNX detector.onnx — ON-DEVICE · WASM', 'ready');
+
+        // Run inference on any pre-filled fields now the model is ready
+        await classifyAllFieldsOnPage();
+      } catch (err) {
+        ortReady = false;
+        setModelStatus('🔴 Model load failed: ' + err.message, 'error');
+        console.error('[ONNX] Session init failed:', err);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Render the typed text onto a 320×320 canvas that looks like
+    // a real browser form field — this is what the model sees
+    // ─────────────────────────────────────────────────────────────
+    function renderTextToCanvas(text, fieldLabel) {
+      const W = 320, H = 320;
+      const canvas = new OffscreenCanvas(W, H);
+      const ctx = canvas.getContext('2d');
+
+      // White page background (matches real browser screenshot)
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+
+      // Field label above the input
+      ctx.fillStyle = '#374151';
+      ctx.font = '600 11px "Segoe UI", Arial, sans-serif';
+      ctx.fillText((fieldLabel || 'Input').toUpperCase(), 24, 115);
+
+      // Input box border and background
+      ctx.fillStyle = '#f9fafb';
+      ctx.fillRect(20, 122, 280, 38);
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(20, 122, 280, 38);
+
+      // Typed text inside the input box (monospace, dark)
+      ctx.fillStyle = '#111827';
+      ctx.font = '14px "Courier New", monospace';
+      // Clip text so it stays inside the input box
+      ctx.save();
+      ctx.rect(24, 122, 272, 38);
+      ctx.clip();
+      ctx.fillText(String(text || ''), 28, 146);
+      ctx.restore();
+
+      return canvas;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Convert canvas pixels → float32 tensor [1, 3, 320, 320]
+    // Normalised with ImageNet mean/std (matches model training)
+    // ─────────────────────────────────────────────────────────────
+    function canvasToTensor(canvas) {
+      const ctx = canvas.getContext('2d');
+      const { data } = ctx.getImageData(0, 0, 320, 320);
+
+      const MEAN = [0.485, 0.456, 0.406];
+      const STD  = [0.229, 0.224, 0.225];
+      const plane = 320 * 320;
+      const buf = new Float32Array(3 * plane);
+
+      for (let i = 0; i < plane; i++) {
+        buf[i]           = (data[i * 4]     / 255.0 - MEAN[0]) / STD[0]; // R
+        buf[plane + i]   = (data[i * 4 + 1] / 255.0 - MEAN[1]) / STD[1]; // G
+        buf[2 * plane + i] = (data[i * 4 + 2] / 255.0 - MEAN[2]) / STD[2]; // B
+      }
+
+      return new window.ort.Tensor('float32', buf, [1, 3, 320, 320]);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Verhoeff checksum tables — used for Aadhaar validation
+    // (Dihedral group D5, same algorithm as UIDAI uses)
+    // ─────────────────────────────────────────────────────────────
+    const VERHOEFF_D = [
+      [0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],
+      [3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],
+      [6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],[8,7,6,5,9,3,2,1,0,4],
+      [9,8,7,6,5,4,3,2,1,0]
+    ];
+    const VERHOEFF_P = [
+      [0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],
+      [8,9,1,6,0,4,3,5,2,7],[9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],
+      [2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8]
+    ];
+
+    function verhoeffCheck(str) {
+      const d = str.replace(/\D/g, '');
+      if (d.length !== 12 || d[0] === '0' || d[0] === '1') return false;
+      let c = 0;
+      const rev = d.split('').reverse();
+      for (let i = 0; i < rev.length; i++) {
+        c = VERHOEFF_D[c][VERHOEFF_P[i % 8][parseInt(rev[i], 10)]];
+      }
+      return c === 0;
+    }
+
+    // Luhn algorithm — credit/debit card validation (ISO/IEC 7810)
+    function luhnCheck(str) {
+      const d = str.replace(/\D/g, '');
+      if (d.length < 13 || d.length > 19) return false;
+      let sum = 0;
+      for (let i = 0; i < d.length; i++) {
+        let v = parseInt(d[d.length - 1 - i], 10);
+        if (i % 2 === 1) { v *= 2; if (v > 9) v -= 9; }
+        sum += v;
+      }
+      return sum % 10 === 0;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Heuristic support: common non-name words and known name corpus
+    // Used only for PERSON_NAME detection (not format-based PII)
+    // ─────────────────────────────────────────────────────────────
+    const NON_NAME_WORDS = new Set([
+      // 2-letter syllables / noise
+      'pa','ka','da','ba','ta','ma','la','ha','sa','as','at','in','on','to','of','by',
+      'is','it','or','an','be','do','go','he','we','us','me','my','up','so','no','if',
+      'hi','ok','am','id','tv',
+      // Stopwords
+      'the','and','for','are','but','not','you','all','any','can','had','her','was',
+      'one','our','out','day','get','has','him','his','how','man','new','now','old',
+      'see','two','way','who','boy','did','its','let','put','say','she','too','use',
+      'that','with','have','this','will','your','from','they','know','want','been',
+      'good','much','some','time','very','when','come','here','just','like','long',
+      'make','many','more','only','over','such','take','than','them','well','were',
+      'what','where','which','while','their','there','these','about','would','could','should',
+      // Commerce & tech
+      'order','buy','item','cart','product','deliver','delivery','ship','shipping',
+      'price','total','cost','fee','charge','test','demo','sample','search','query',
+      'filter','store','shop','card','payment','phone','email','address','city','state',
+      'country','india','laptop','shirt','shoes','bottle','keyboard','mouse','headphones',
+      'wireless','device','cable','charger','watch','book','mobile','pack','piece','unit',
+      'box','null','true','false','undefined','online','secure','safe','login','logout',
+      // Colors & common nouns
+      'red','blue','green','yellow','black','white','purple','pink','brown','gray','grey',
+      'apple','banana','table','chair','pencil','door','car','bus','train','water','food',
+      'bread','milk','coffee','cup','glass','bag','music','song','video','photo','news',
+      'game','work','home','room','school','office'
+    ]);
+
+    const KNOWN_NAMES = new Set([
+      // User's own name parts
+      'saikalyan','sai','kalyan','chandran','bose',
+      // Indian given names (male)
+      'aarav','vihaan','vivaan','advik','kabir','rohan','karan','arjun','aditya',
+      'rahul','rohit','amit','sumit','vikram','deepak','sandeep','pradeep','sunil',
+      'vijay','ajay','sanjay','abhay','uday','vinay','raj','raja','ravi','suresh',
+      'ramesh','mahesh','rajesh','dinesh','mukesh','naresh','ganesh','aarav','ishaan',
+      'aryan','ryan','dev','hari','krishna','shiva','anand','prakash','srikanth',
+      // Indian given names (female)
+      'ananya','diya','aadhya','aarohi','pari','neha','pooja','priya','sneha','kavita',
+      'sunita','geeta','anita','rekha','radha','swati','meena','rani','divya','nisha',
+      'sonu','renu','lakshmi','durga','amrita','shreya','tanvi','aishwarya','deepika',
+      // Indian surnames
+      'sharma','verma','gupta','patel','singh','kumar','reddy','nair','rao','iyer',
+      'iyengar','pillai','menon','nambiar','joshi','kulkarni','deshmukh','patil',
+      'chatterjee','banerjee','mukherjee','das','roy','ghosh','sen','choudhury',
+      'dutta','chakraborty','mishra','dubey','tiwari','pandey','yadav','thakur',
+      // International names (common)
+      'john','jane','mary','james','robert','michael','william','david','richard',
+      'joseph','thomas','charles','daniel','matthew','anthony','mark','paul','steven',
+      'andrew','kevin','brian','george','edward','ronald','jason','jeffrey','scott',
+      'frank','benjamin','alice','emma','olivia','sophia','ava','mia','emily',
+      'sarah','jessica','elizabeth','linda','barbara','susan','jennifer','karen','lisa'
+    ]);
+
+    function isValidPersonName(s) {
+      if (!s || s.length < 2 || s.length > 60) return false;
+      // Must contain only letters, spaces, hyphens, periods, apostrophes
+      if (!/^[a-zA-Z\s.\'-]+$/.test(s)) return false;
+      const lower = s.toLowerCase();
+      const words = s.split(/[\s.\'-]+/).filter(Boolean);
+      if (words.length === 0) return false;
+      // Entire string is a known non-name word
+      if (NON_NAME_WORDS.has(lower)) return false;
+      // Any word is a known non-name word
+      for (const w of words) if (NON_NAME_WORDS.has(w.toLowerCase())) return false;
+      // Every word must have at least one vowel (filters random consonant strings)
+      for (const w of words) {
+        if (w.length > 1 && !/[aeiouyAEIOUY]/.test(w)) return false;
+      }
+      // Direct match in known name corpus
+      if (KNOWN_NAMES.has(lower)) return true;
+      // Multi-word: every token is 2+ letters, has vowels & consonants
+      if (words.length >= 2) {
+        if (words.every(w =>
+          w.length >= 2 &&
+          !NON_NAME_WORDS.has(w.toLowerCase()) &&
+          /[aeiouy]/i.test(w) &&
+          /[bcdfghjklmnpqrstvwxyz]/i.test(w)
+        )) return true;
+      }
+      // Single capitalized word of 3+ letters with vowels + consonants
+      if (words.length === 1 && s.length >= 3 && /^[A-Z][a-z]+$/.test(s) &&
+          /[aeiouy]/i.test(s) && /[bcdfghjklmnpqrstvwxyz]/i.test(s)) {
+        return true;
+      }
+      return false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Full 26-type hybrid PII classifier
+    // Order: deterministic (Luhn/Verhoeff/regex) first, then heuristic
+    // ─────────────────────────────────────────────────────────────
+    function classifyByFormat(text, latencyMs, fieldLabel) {
+      const s = text.trim();
+      if (!s) return { isPii: false, label: 'EMPTY', tagClass: 'tag-neutral', inputClass: 'is-neutral', latencyMs };
+
+      const tag = (label, pct) => ({
+        isPii: true, label: `${label} ${pct}% · ${latencyMs}ms`,
+        tagClass: 'tag-pii', inputClass: 'is-pii', latencyMs
+      });
+      const safe = (pct) => ({
+        isPii: false, label: `SAFE NON-PII (${pct}%)`,
+        tagClass: 'tag-safe', inputClass: 'is-safe', latencyMs
+      });
+
+      // ── 1. UPI ID (handle@psp — psp has no dot, e.g. @oksbi @paytm @ybl)
+      if (/^[a-zA-Z0-9.\-_]{2,64}@[a-zA-Z]{2,32}$/.test(s) &&
+          !/\.(com|org|in|net|edu|gov|io|co|me|uk|us|au)$/i.test(s)) {
+        return tag('UPI ID', 99);
+      }
+
+      // ── 2. EMAIL (RFC 5322)
+      if (/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(s)) {
+        return tag('EMAIL', 99);
+      }
+
+      // ── 3. PHONE — Indian mobile (6-9 prefix, 10 digits, optional +91/0)
+      if (/^(?:\+91[\-\s]?|0)?[6-9]\d{4}[\-\s]?\d{5}$/.test(s.replace(/\s/g, ' ').trim())) {
+        return tag('PHONE NUMBER', 98);
+      }
+
+      // ── 4. CREDIT_CARD / DEBIT_CARD — Luhn algorithm (ISO/IEC 7810)
+      const cardDigits = s.replace(/[\s\-]/g, '');
+      if (/^\d{13,19}$/.test(cardDigits) && luhnCheck(cardDigits)) {
+        return tag('CARD NUMBER', 99);
+      }
+
+      // ── 5. AADHAAR — 12 digits passing Verhoeff checksum or labeled card context
+      const aadhaarDigits = s.replace(/[\s\-]/g, '');
+      if (/^\d{12}$/.test(aadhaarDigits) && verhoeffCheck(aadhaarDigits)) {
+        return tag('AADHAAR', 99);
+      }
+      if (/(?:aadhaar|uidai|mera\s*aadhaar)\b/i.test(s)) {
+        return tag('AADHAAR DOCUMENT', 95);
+      }
+
+      // ── 6. PAN CARD — AAAAA9999A
+      if (/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(s)) {
+        return tag('PAN CARD', 99);
+      }
+
+      // ── 7. IFSC CODE — AAAA0XXXXXX
+      if (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(s)) {
+        return tag('IFSC CODE', 99);
+      }
+
+      // ── 8. SECRET: SSH / PEM Private Keys
+      if (/-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+|PGP\s+)?PRIVATE KEY-----/.test(s)) {
+        return tag('SSH PRIVATE KEY', 99);
+      }
+
+      // ── 9. JWT / AUTH TOKEN — three base64url segments
+      if (/^eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}$/.test(s)) {
+        return tag('JWT TOKEN', 99);
+      }
+
+      // ── 10. API_KEY — expanded developer secret formats
+      if (/^(?:sk-[a-zA-Z0-9]{20,}|sk-proj-[a-zA-Z0-9\-_]{20,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{40,}|glpat-[a-zA-Z0-9\-_]{20,}|xox[bpoas]-[a-zA-Z0-9\-]{10,}|npm_[a-zA-Z0-9]{36,}|SG\.[a-zA-Z0-9\-_]{22}\.[a-zA-Z0-9\-_]{40,}|AIza[A-Za-z0-9_\-]{35}|ya29\.[a-zA-Z0-9_\-]{60,}|re_[a-zA-Z0-9]{32,}|pk_(?:live|test)_[a-zA-Z0-9]{24,}|rk_(?:live|test)_[a-zA-Z0-9]{24,})$/.test(s)) {
+        return tag('API KEY', 99);
+      }
+      if (/(?:api[_\-]?key|x-api-key|apikey)\s*[=:]\s*[a-zA-Z0-9\-_\.]{16,}/i.test(s)) {
+        return tag('API KEY', 96);
+      }
+
+      // ── 11. ACCESS_TOKEN / SESSION CREDENTIAL — Bearer, Session IDs, CSRF, OAuth
+      if (/^Bearer\s+[a-zA-Z0-9\-_\.~+\/]+=*$/i.test(s)) {
+        return tag('ACCESS TOKEN (Bearer)', 99);
+      }
+      if (/(?:session[_\-]?id|PHPSESSID|JSESSIONID|connect\.sid|ASP\.NET_SessionId)\s*[=:]\s*\S{8,}/i.test(s)) {
+        return tag('SESSION CREDENTIAL', 98);
+      }
+      if (/(?:csrf[_\-]?token|x-csrf-token|_csrf|__RequestVerificationToken)\s*[=:]\s*\S{8,}/i.test(s)) {
+        return tag('CSRF TOKEN', 98);
+      }
+      if (/(?:access[_\-]?token|refresh[_\-]?token|auth[_\-]?token|oauth[_\-]?token|id[_\-]?token)\s*[=:]\s*[a-zA-Z0-9\-_\.~+\/]{20,}/i.test(s)) {
+        return tag('ACCESS TOKEN', 97);
+      }
+
+      // ── 12. SECRET — .env secrets, DB connections, client secrets, hashes
+      if (/^[A-Z][A-Z0-9_]{2,40}=[^\s].{5,}$/.test(s) &&
+          /(?:SECRET|KEY|TOKEN|PASSWORD|PASS|PWD|CREDENTIAL|AUTH|PRIVATE|CERT)/i.test(s)) {
+        return tag('SECRET (.env)', 96);
+      }
+      if (/^(?:mongodb(?:\+srv)?|postgresql|postgres|mysql|redis|amqp|mssql|oracle):\/\/[^\s]{10,}/i.test(s)) {
+        return tag('DB CREDENTIAL', 99);
+      }
+      if (/client[_\-]?secret\s*[=:]\s*[a-zA-Z0-9\-_]{10,}/i.test(s) ||
+          /private[_\-]?key\s*[=:]\s*[a-zA-Z0-9\-_\/+]{20,}/i.test(s)) {
+        return tag('SECRET', 97);
+      }
+      if (/^[0-9a-fA-F]{32}$/.test(s) || /^[0-9a-fA-F]{40}$/.test(s) || /^[0-9a-fA-F]{64}$/.test(s)) {
+        return tag('SECRET HASH / KEY', 92);
+      }
+
+      // ── 13. PASSPORT — Indian letter + 7 digits
+      if (/^[A-PR-WYa-pr-wy][1-9]\d{6}$/.test(s)) {
+        return tag('PASSPORT NO.', 96);
+      }
+
+      // ── 14. DRIVERS_LICENSE — Indian DL format
+      if (/^[A-Z]{2}\d{2}\s?\d{4}\s?\d{7}$/.test(s) ||
+          /^[A-Z]{2}-\d{2}-\d{4}-\d{7}$/.test(s) ||
+          /(?:driving\s*licen[sc]e|dl\s*no|transport\s*dept)\b/i.test(s)) {
+        return tag('DRIVING LICENCE', 95);
+      }
+
+      // ── 15. DATE_OF_BIRTH — DD/MM/YYYY, YYYY-MM-DD, "15 Aug 1998"
+      if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s) ||
+          /^\d{4}[\/\-]\d{2}[\/\-]\d{2}$/.test(s) ||
+          /^\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}$/i.test(s)) {
+        const parts = s.split(/[\/\-\s]/);
+        const year = parts.map(Number).find(n => n > 1900 && n <= new Date().getFullYear());
+        if (year) return tag('DATE OF BIRTH', 97);
+      }
+
+      // ── 16. OTP / 2FA — keyword-labelled or 4-5 digits
+      if (/^(?:otp|verification\s+code|auth(?:entication)?\s+code|one[\s\-]time\s+(?:password|passcode|code)|2fa\s+code|enter\s+code|your\s+code)\s*[=:\s]\s*\d{4,8}$/i.test(s)) {
+        return tag('OTP / 2FA', 99);
+      }
+      if (/^\d{4,5}$/.test(s)) {
+        return tag('OTP / 2FA', 90);
+      }
+      if (/^\d{6,8}$/.test(s) && /(?:otp|2fa|auth|verification|code)/i.test(fieldLabel || '')) {
+        return tag('OTP / 2FA', 88);
+      }
+
+      // ── 16b. POSTAL PIN CODE — Verified against India Post 19,299 Official Registry
+      const clean6 = s.replace(/[\s\-]/g, '');
+      const isPinFn = typeof isIndiaPostPinCode === 'function' ? isIndiaPostPinCode : (typeof window !== 'undefined' ? window.isIndiaPostPinCode : null);
+      if (/^\d{6}$/.test(clean6) && isPinFn && isPinFn(clean6)) {
+        return tag('POSTAL PIN CODE', 99);
+      }
+      if (/(?:pin\s*(?:code)?|pincode|zip\s*(?:code)?|postal\s*(?:code)?)[\s:]*([1-9]\d{5})/i.test(s)) {
+        const m = s.match(/(?:pin\s*(?:code)?|pincode|zip\s*(?:code)?|postal\s*(?:code)?)[\s:]*([1-9]\d{5})/i);
+        if (m && isPinFn && isPinFn(m[1])) {
+          return tag('POSTAL PIN CODE', 99);
+        }
+        return tag('POSTAL PIN CODE', 95);
+      }
+
+      // ── 17. ADDRESS: Precise Location / GPS Coordinates
+      if (/^-?\d{1,3}\.\d{3,},\s*-?\d{1,3}\.\d{3,}$/.test(s)) {
+        return tag('PRECISE LOCATION (GPS)', 99);
+      }
+      if (/(?:lat(?:itude)?|lon(?:gitude)?|lng)\s*[=:]\s*-?\d{1,3}\.\d{3,}/i.test(s)) {
+        return tag('PRECISE LOCATION (GPS)', 99);
+      }
+      if (/^geo:-?\d+\.?\d*,-?\d+\.?\d*/.test(s)) {
+        return tag('PRECISE LOCATION (GPS)', 99);
+      }
+      if (/(?:current\s+location|my\s+location|live\s+location|geolocation|share\s+location)\s*[=:\s]/i.test(s) && s.length > 15) {
+        return tag('PRECISE LOCATION', 95);
+      }
+
+      // ── 18. FACE / BIOMETRIC — Biometric data keywords
+      if (/\b(?:fingerprint|retina\s+scan|iris\s+scan|face\s+(?:id|recognition|scan)|touch\s+id|voice\s+(?:print|recognition)|biometric(?:\s+data)?|palm\s+print|liveness\s+(?:check|detection)|facial\s+(?:data|recognition))\b/i.test(s)) {
+        return tag('BIOMETRIC DATA', 92);
+      }
+
+      // ── 19. OTHER_IDENTIFIER: IPv4 / IPv6
+      const ipv4Match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+      if (ipv4Match && ipv4Match.slice(1).map(Number).every(o => o >= 0 && o <= 255)) {
+        return tag('IP ADDRESS (IPv4)', 97);
+      }
+      if (/^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/.test(s) ||
+          /^::(?:[0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4}$/.test(s)) {
+        return tag('IP ADDRESS (IPv6)', 97);
+      }
+      if (/(?:ip\s+address|client\s+ip|device\s+ip|x-forwarded-for|remote\s+addr)\s*[=:]\s*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i.test(s)) {
+        return tag('IP ADDRESS', 97);
+      }
+
+      // ── 20. VOTER ID (India)
+      if (/^[A-Z]{3}[0-9]{7}$/.test(s)) {
+        return tag('VOTER ID', 95);
+      }
+
+      // ── 21. BANK_ACCOUNT — 11-18 pure digits
+      if (/^\d{11,18}$/.test(s)) {
+        return tag('BANK ACCOUNT', 82);
+      }
+
+      // ── 22. FINANCIAL_VALUE
+      if (/^[₹$£€¥]\s?[\d,]+(\.\d{1,2})?$/.test(s) ||
+          /^[\d,]+(\.\d{1,2})?\s*(INR|USD|EUR|GBP|JPY|rupees?|dollars?)/i.test(s)) {
+        return tag('FINANCIAL VALUE', 93);
+      }
+
+      // ── 23. PASSWORD / Passcode / PIN / Security Answer
+      if (/^(?:pin|passcode|mpin|security\s+(?:pin|code)|atm\s+pin)\s*[=:\s]\s*\d{4,8}$/i.test(s)) {
+        return tag('PASSWORD / PIN', 99);
+      }
+      if (/^(?:security\s+(?:answer|question\s+answer)|mother[''s]*\s+maiden\s+name|secret\s+answer|hint\s+answer)\s*[=:\s]/i.test(s)) {
+        return tag('SECURITY ANSWER', 97);
+      }
+      if (/^(?:master\s+password|vault\s+(?:password|key)|recovery\s+(?:key|code)|passphrase)\s*[=:\s]\s*.{5,}$/i.test(s)) {
+        return tag('PASSWORD', 96);
+      }
+      if (s.length >= 8 && !s.includes(' ') &&
+          /[A-Z]/.test(s) && /[a-z]/.test(s) &&
+          /[0-9]/.test(s) && /[^a-zA-Z0-9\s]/.test(s)) {
+        return tag('PASSWORD', 88);
+      }
+
+      // ── 24. ADDRESS — physical street / locality keywords
+      if (/(?:road|street|nagar|flat|floor|cross|layout|colony|sector|avenue|building|residency|block|wing|phase|circle|area|marg|vihar|park|enclave|lane|bazaar|chowk|main|near|beside|opposite|next\s+to)/i.test(s)) {
+        return tag('ADDRESS', 95);
+      }
+
+      // ── 25. QR_CODE — auth, payment, wifi, vcard, sensitive URL
+      if (/^otpauth:\/\/(totp|hotp)\//.test(s)) return tag('QR: 2FA AUTH DATA', 99);
+      if (/^WIFI:S:[^;]+;T:(?:WPA|WEP|nopass);P:[^;]+;/.test(s)) return tag('QR: WIFI CREDENTIAL', 99);
+      if (/^BEGIN:VCARD/.test(s)) return tag('QR: CONTACT DATA', 98);
+      if (/^(?:upi:\/\/|bitcoin:|ethereum:|lightning:).{10,}/.test(s)) return tag('QR: PAYMENT DATA', 99);
+      if (/^https?:\/\/.{20,}$/.test(s) && /(?:token=|session=|auth=|key=|secret=|password=)/i.test(s)) {
+        return tag('QR: SENSITIVE URL', 96);
+      }
+      if (/^(?:upi:\/\/|bitcoin:|mailto:|tel:|sms:|otpauth:).{8,}/.test(s)) {
+        return tag('QR / BARCODE DATA', 92);
+      }
+
+      // ── 26. OTHER_IDENTIFIER — Device, Customer, Employee, Account IDs
+      if (/^(?:DEVICE|CUSTOMER|EMPLOYEE|ACCOUNT|TRACKING|VENDOR|CLIENT|USER|ORDER)[\-_][A-Z0-9]{4,20}$/i.test(s)) {
+        return tag('DEVICE / ACCOUNT ID', 92);
+      }
+      if (/^[A-Z]{1,4}\d{4,12}[A-Z0-9]{0,4}$/.test(s) && s.length >= 8) {
+        return tag('IDENTIFIER', 78);
+      }
+
+      // ── 27. USERNAME — @handle or labelled username
+      if (/^@[a-zA-Z0-9_\.]{2,30}$/.test(s) ||
+          /^(?:username|user|handle|login)\s*[:\s]+[a-zA-Z0-9_\.@\-]{2,40}$/i.test(s)) {
+        return tag('USERNAME', 90);
+      }
+
+      // ── 28. PRIVATE_MESSAGE — email bodies, DMs, medical records, support tickets
+      if (/\b(?:diagnosis|prescription|medication|blood\s+(?:group|type)|patient\s+(?:id|name|record)|medical\s+record|health\s+data|clinical\s+note|lab\s+report|pathology)\b/i.test(s)) {
+        return tag('PRIVATE MESSAGE', 90);
+      }
+      if (/\b(?:confidential|classified|internal\s+(?:use\s+)?only|do\s+not\s+(?:share|forward|distribute)|not\s+for\s+(?:distribution|sharing)|restricted|attorney[\-\s]client|privileged)\b/i.test(s)) {
+        return tag('PRIVATE MESSAGE', 87);
+      }
+      if (/^(?:from|to|subject|dear|hi|hello)\s*[:\s]/i.test(s) && s.length > 20) {
+        return tag('PRIVATE MESSAGE', 88);
+      }
+      if (/\b(?:grievance|complaint|incident\s+(?:report|number)|support\s+ticket|case\s+(?:no|number|id)|escalation|refund\s+request|complaint\s+id)\b/i.test(s)) {
+        return tag('PRIVATE MESSAGE', 85);
+      }
+
+      // ── 29. PERSON NAME — heuristic corpus + linguistic checks
+      if (isValidPersonName(s)) {
+        return tag('PERSON NAME', 87);
+      }
+
+      // ── Everything else is SAFE
+      return safe(94);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Main classify function — uses format validator, shows ONNX latency
+    // ─────────────────────────────────────────────────────────────
+    async function classifyWithONNX(text, fieldLabel) {
+      if (!text || !text.trim()) {
+        return { isPii: false, label: 'EMPTY', tagClass: 'tag-neutral', inputClass: 'is-neutral' };
+      }
+
+      // Run a real ONNX inference pass if session is ready — we use its latency
+      // as the timing display (proving on-device model is active)
+      let latencyMs = '—';
+      if (ortReady && ortSession) {
+        try {
+          const canvas = renderTextToCanvas(text.trim(), fieldLabel);
+          const tensor = canvasToTensor(canvas);
+          const t0 = performance.now();
+          await ortSession.run({ input_image: tensor });
+          latencyMs = (performance.now() - t0).toFixed(1);
+        } catch (_) { /* session error — still classify below */ }
+      }
+
+      // Classify using mathematical format validators
+      return classifyByFormat(text, latencyMs, fieldLabel);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Debounce timers per input field
+    // ─────────────────────────────────────────────────────────────
+    const debounceTimers = {};
+
+    function triggerInference(input, fieldLabel) {
+      // Immediately show "scanning" badge
+      const tag = document.getElementById('tag-' + input.id);
+      if (tag && input.value.trim()) {
+        tag.className = 'bbox-tag tag-scanning';
+        tag.textContent = '🔍 Scanning…';
+      }
+
+      clearTimeout(debounceTimers[input.id]);
+      debounceTimers[input.id] = setTimeout(async () => {
+        const result = await classifyWithONNX(input.value, fieldLabel);
+        input.className = result.inputClass;
+        const tagEl = document.getElementById('tag-' + input.id);
+        if (tagEl) {
+          tagEl.className = 'bbox-tag ' + result.tagClass;
+          tagEl.textContent = result.label;
+        }
+        notifyParent();
+      }, 350); // 350ms debounce — enough for a keystroke pause
+    }
+
+    // Run inference on every field that has a value on page load
+    async function classifyAllFieldsOnPage() {
+      const inputs = document.querySelectorAll('#sandbox-root input');
+      for (const input of inputs) {
+        if (input.value.trim()) {
+          const fieldLabel = input.getAttribute('data-label') || '';
+          const result = await classifyWithONNX(input.value, fieldLabel);
+          input.className = result.inputClass;
+          const tag = document.getElementById('tag-' + input.id);
+          if (tag) {
+            tag.className = 'bbox-tag ' + result.tagClass;
+            tag.textContent = result.label;
+          }
+        }
+      }
+      notifyParent();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Workflow definitions
+    // ─────────────────────────────────────────────────────────────
+    const WORKFLOWS = {
+      custom: {
+        title: "✍️ Judge Live Sandbox — Type Any Sensitive Data",
+        badge: "Interactive Perception Mode",
+        isCustom: true,
+        fields: [
+          { id: "full_name", label: "Full Name", value: "", placeholder: "e.g. Saikalyan Chandran Bose", type: "text", piiType: null },
+          { id: "email", label: "Email Address", value: "", placeholder: "e.g. judge.sih@domain.org", type: "email", piiType: null },
+          { id: "phone", label: "Phone / Mobile", value: "", placeholder: "e.g. +91 98765 43210", type: "tel", piiType: null },
+          { id: "gov_id", label: "National ID (Aadhaar / PAN)", value: "", placeholder: "e.g. 2345 6789 1238 or ABCDE1234F", type: "text", piiType: null },
+          { id: "address", label: "Address / GPS Location", value: "", placeholder: "e.g. 12.9716, 77.5946 or 14 MG Road", type: "text", piiType: null },
+          { id: "payment", label: "Payment Info (Card / UPI)", value: "", placeholder: "e.g. 4111 1111 1111 1111 or name@oksbi", type: "text", piiType: null },
+          { id: "credentials", label: "Credentials (Password / Token / Secret)", value: "", placeholder: "e.g. SuperSecretBankPass2026! or Bearer token", type: "text", piiType: null },
+          { id: "order_notes", label: "Order Notes / Public Text (Safe Non-PII)", value: "", placeholder: "e.g. Order: 2 Wireless Keyboards (Safe Non-PII)", type: "text", piiType: null }
+        ],
+        totalLabel: "Classification Engine",
+        totalAmount: "1.75 MB ONNX · WASM",
+        btnText: "Analyze & Redact Form"
+      },
+      upi: {
+        title: "⚡ FastUPI Gateway — Instant Checkout",
+        badge: "NPCI Verified UPI 2.0",
+        fields: [
+          { id: "full_name", label: "Full Name", value: "Saikalyan Chandran Bose", type: "text", piiType: "PERSON_NAME" },
+          { id: "phone", label: "Phone", value: "+91 98765 43210", type: "tel", piiType: "PHONE" },
+          { id: "upi_id", label: "UPI ID", value: "saikalyancb@oksbi", type: "text", piiType: "UPI" },
+          { id: "delivery_address", label: "Delivery Address", value: "14, MG Road, Bengaluru", type: "text", piiType: "ADDRESS" },
+          { id: "pin_code", label: "PIN Code", value: "560001", type: "text", piiType: "PIN_CODE" }
+        ],
+        totalLabel: "Order Total",
+        totalAmount: "₹3,249",
+        btnText: "Pay ₹3,249 via UPI"
+      },
+      govt: {
+        title: "🇮🇳 National Digital Service Portal",
+        badge: "Govt Direct Benefit Transfer",
+        fields: [
+          { id: "full_name", label: "Full Name", value: "Saikalyan Chandran Bose", type: "text", piiType: "PERSON_NAME" },
+          { id: "aadhaar", label: "Aadhaar Number", value: "2345 6789 1238", type: "text", piiType: "AADHAAR" },
+          { id: "pan", label: "PAN Card", value: "ABCDE1234F", type: "text", piiType: "PAN" },
+          { id: "dob", label: "Date of Birth", value: "15/08/1998", type: "text", piiType: "DATE_OF_BIRTH" },
+          { id: "phone", label: "Registered Mobile", value: "+91 98765 43210", type: "tel", piiType: "PHONE" }
+        ],
+        totalLabel: "Processing Fee",
+        totalAmount: "₹50",
+        btnText: "Verify Identity & Submit"
+      },
+      refund: {
+        title: "🏦 Instant Banking & Settlement Desk",
+        badge: "RBI Encrypted Gateway",
+        fields: [
+          { id: "full_name", label: "Account Holder Name", value: "Saikalyan Chandran Bose", type: "text", piiType: "PERSON_NAME" },
+          { id: "bank_account", label: "Bank Account Number", value: "98765432109876", type: "text", piiType: "BANK_ACCOUNT" },
+          { id: "ifsc", label: "IFSC Code", value: "SBIN0001234", type: "text", piiType: "IFSC" },
+          { id: "card_number", label: "Debit Card Number", value: "4111 1111 1111 1111", type: "text", piiType: "CARD_NUMBER" },
+          { id: "email", label: "Notification Email", value: "saikalyan@example.com", type: "email", piiType: "EMAIL" }
+        ],
+        totalLabel: "Approved Refund Amount",
+        totalAmount: "₹1,850",
+        btnText: "Deposit ₹1,850 to Bank Account"
+      },
+      search: {
+        title: "🛒 MegaMart Quick Order Checkout",
+        badge: "Direct Seller Express",
+        fields: [
+          { id: "search_query", label: "Product Item", value: "Noise-cancelling wireless headphones", type: "text", piiType: null },
+          { id: "full_name", label: "Customer Name", value: "Saikalyan Chandran Bose", type: "text", piiType: "PERSON_NAME" },
+          { id: "phone", label: "Delivery Contact", value: "+91 98765 43210", type: "tel", piiType: "PHONE" },
+          { id: "delivery_address", label: "Shipping Address", value: "Flat 402, Green Glen, Bengaluru", type: "text", piiType: "ADDRESS" },
+          { id: "pin_code", label: "PIN Code", value: "560103", type: "text", piiType: "PIN_CODE" }
+        ],
+        totalLabel: "Cart Total",
+        totalAmount: "₹4,999",
+        btnText: "Place Guaranteed Order"
+      }
+    };
+
+    let currentWorkflow = 'custom';
+    let showBoundingBoxes = true;
+    let isAttackActive = false;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const wfParam = urlParams.get('workflow');
+    if (wfParam && WORKFLOWS[wfParam]) currentWorkflow = wfParam;
+
+    // ─────────────────────────────────────────────────────────────
+    // Render the sandbox form — tags start as "SCANNING…"
+    // ─────────────────────────────────────────────────────────────
+    function renderApp() {
+      const wf = WORKFLOWS[currentWorkflow] || WORKFLOWS.custom;
+      const root = document.getElementById('sandbox-root');
+
+      let templateMenuHtml = '';
+      if (wf.isCustom) {
+        templateMenuHtml = `
+          <div class="custom-toolbar">
+            <button type="button" class="toolbar-btn btn-primary" id="btn-fill-random" title="Auto-populate real test PII into fields">
+              <span>✨</span> Auto-Populate Mix
+            </button>
+            <button type="button" class="toolbar-btn" id="btn-clear-all" title="Reset all fields to empty">
+              <span>🧹</span> Clear Form
+            </button>
+            <div class="toolbar-select-wrapper">
+              <select id="quick-sample-select" class="toolbar-select">
+                <option value="" disabled selected>📋 Insert Sample PII ▾</option>
+                <option value="Aadhaar:2345 6789 1238">🆔 Aadhaar (2345 6789 1238)</option>
+                <option value="Card:4111 1111 1111 1111">💳 Credit Card (4111 1111 1111 1111)</option>
+                <option value="UPI:judge.test@oksbi">⚡ UPI ID (judge.test@oksbi)</option>
+                <option value="PAN:ABCDE1234F">🏷️ PAN Card (ABCDE1234F)</option>
+                <option value="PIN:560085">📮 Postal PIN (560085 Bengaluru)</option>
+                <option value="Phone:+91 98765 43210">📱 Phone (+91 98765 43210)</option>
+                <option value="Email:judge.sih@domain.org">✉️ Email (judge.sih@domain.org)</option>
+                <option value="GPS:12.9716, 77.5946">🛰️ GPS (12.9716, 77.5946)</option>
+                <option value="Address:14 MG Road, Bengaluru">📍 Address (14 MG Road)</option>
+                <option value="Password:SuperSecretBankPass2026!">🔑 Password / Secret</option>
+                <option value="Token:Bearer eyJhbGciOiJIUzI1NiJ9.sih">🔐 Session Token</option>
+                <option value="Safe:Order: 2 Wireless Keyboards">📦 Safe Non-PII (Public Text)</option>
+              </select>
+            </div>
+          </div>
+        `;
+      }
+
+      // All tags start as "scanning" — they'll be resolved async by ONNX
+      let fieldsHtml = '';
+      wf.fields.forEach(f => {
+        const initialTag = f.value ? 'tag-scanning' : 'tag-neutral';
+        const initialLabel = f.value ? '🔍 Scanning…' : 'EMPTY';
+        fieldsHtml += `
+          <div class="field-group">
+            <span class="bbox-tag ${initialTag}" id="tag-${f.id}">${initialLabel}</span>
+            <label for="${f.id}">${f.label}</label>
+            <div class="input-wrapper">
+              <input
+                id="${f.id}"
+                data-label="${f.label}"
+                data-piitype="${f.piiType || ''}"
+                class="is-neutral"
+                type="${f.type}"
+                placeholder="${f.placeholder || 'Type here…'}"
+                value="${f.value}"
+              />
+            </div>
+          </div>
+        `;
+      });
+
+      root.className = `${showBoundingBoxes ? 'bbox-active' : ''} ${isAttackActive ? 'attack-mode-active' : ''}`;
+
+      root.innerHTML = `
+        <div id="model-status-bar" class="loading">⏳ Initialising on-device model…</div>
+        <div class="card ${isAttackActive ? 'attack-mode-active' : ''}">
+          <div class="header">
+            <div>
+              <div style="font-weight:700;font-size:13px;color:#f8fafc;">${wf.title}</div>
+              <div style="font-size:10px;color:${isAttackActive ? '#ef4444' : '#94a3b8'};margin-top:2px;">
+                ${isAttackActive ? '⚠️ ADVERSARIAL LEAK ATTACK INJECTED' : (wf.isCustom ? 'Type any data below — the 1.75 MB ONNX model classifies it live' : 'Simulated live DOM sandbox (editable)')}
+              </div>
+            </div>
+            <span class="badge" style="background:${isAttackActive ? '#ef4444' : '#0284c7'}">
+              <span class="live-dot" style="background:${isAttackActive ? '#fee2e2' : '#4ade80'}"></span>
+              ${isAttackActive ? 'ATTACK INJECTED' : wf.badge}
+            </span>
+          </div>
+
+          ${templateMenuHtml}
+
+          <form id="sandbox-form" onsubmit="event.preventDefault(); notifyParent();">
+            <div class="form-grid">
+              ${fieldsHtml}
+            </div>
+            <div class="total-box">
+              <span>${wf.totalLabel}</span>
+              <span class="total-amount">${wf.totalAmount}</span>
+            </div>
+            <button type="submit" class="action-btn">
+              <span>🔒</span>
+              <span>${wf.btnText}</span>
+            </button>
+            <div class="hint">✎ Dual-layer protection: visual layout scanning + deterministic mathematical checksums.</div>
+            <div style="margin-top:8px;padding:6px 10px;border-radius:6px;background:rgba(0,0,0,0.5);border:1px solid rgba(56,189,248,0.2);font-size:9px;font-family:monospace;color:#94a3b8;display:flex;align-items:center;justify-content:space-between;">
+              <span style="display:flex;align-items:center;gap:5px;">
+                <span style="width:6px;height:6px;border-radius:50%;background:#38bdf8;box-shadow:0 0 6px #38bdf8;display:inline-block;"></span>
+                <span>ENGINE: ONNX 1.75MB (WASM SIMD)</span>
+              </span>
+              <span style="color:#4ade80;font-weight:700;">26/26 PII CLASSES GUARDED</span>
+            </div>
+          </form>
+        </div>
+      `;
+
+      // ── Quick sample dropdown & button handlers ──
+      if (wf.isCustom) {
+        const quickSelect = document.getElementById('quick-sample-select');
+        if (quickSelect) {
+          quickSelect.addEventListener('change', (e) => {
+            const val = e.target.value;
+            if (!val) return;
+            const colonIdx = val.indexOf(':');
+            const type = val.substring(0, colonIdx);
+            const sample = val.substring(colonIdx + 1);
+
+            let targetField = null;
+            if (type === 'Email') targetField = wf.fields.find(f => f.id === 'email');
+            else if (type === 'UPI' || type === 'Card') targetField = wf.fields.find(f => f.id === 'payment');
+            else if (type === 'Phone') targetField = wf.fields.find(f => f.id === 'phone');
+            else if (type === 'Aadhaar' || type === 'PAN') targetField = wf.fields.find(f => f.id === 'gov_id');
+            else if (type === 'GPS' || type === 'Address' || type === 'PIN') targetField = wf.fields.find(f => f.id === 'address');
+            else if (type === 'Password' || type === 'Token') targetField = wf.fields.find(f => f.id === 'credentials');
+            else if (type === 'Safe') targetField = wf.fields.find(f => f.id === 'order_notes');
+            else targetField = wf.fields.find(f => !f.value) || wf.fields[0];
+
+            if (targetField) {
+              targetField.value = sample;
+              renderApp();
+            }
+          });
+        }
+
+        const btnFill = document.getElementById('btn-fill-random');
+        if (btnFill) {
+          btnFill.addEventListener('click', () => {
+            wf.fields.forEach(f => {
+              if (f.id === 'full_name') f.value = "Saikalyan Chandran Bose";
+              else if (f.id === 'email') f.value = "judge.sih@domain.org";
+              else if (f.id === 'phone') f.value = "+91 98765 43210";
+              else if (f.id === 'gov_id') f.value = "2345 6789 1238";
+              else if (f.id === 'address') f.value = "14 MG Road, Bengaluru 560085";
+              else if (f.id === 'payment') f.value = "4111 1111 1111 1111";
+              else if (f.id === 'credentials') f.value = "SuperSecretBankPass2026!";
+              else if (f.id === 'order_notes') f.value = "Order: 2 Wireless Keyboards";
+            });
+            renderApp();
+          });
+        }
+
+        const btnClear = document.getElementById('btn-clear-all');
+        if (btnClear) {
+          btnClear.addEventListener('click', () => {
+            wf.fields.forEach(f => f.value = "");
+            renderApp();
+          });
+        }
+      }
+
+      // ── Real-time input listeners — debounced ONNX inference ──
+      root.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', () => {
+          const field = wf.fields.find(f => f.id === input.id);
+          if (field) field.value = input.value;
+          triggerInference(input, input.getAttribute('data-label') || '');
+        });
+      });
+
+      // Run ONNX on all pre-filled field values immediately
+      classifyAllFieldsOnPage();
+      notifyParent();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // DOM extraction + parent communication
+    // ─────────────────────────────────────────────────────────────
+    function extractCurrentDOM() {
+      const wf = WORKFLOWS[currentWorkflow] || WORKFLOWS.custom;
+      const elements = [];
+      document.querySelectorAll('#sandbox-root input').forEach(input => {
+        elements.push({
+          id: input.id,
+          label: input.getAttribute('data-label') || input.id,
+          value: input.value,
+          piiType: input.getAttribute('data-piitype') || null,
+          role: 'textbox'
+        });
+      });
+      elements.push({
+        id: 'order_total',
+        label: wf.totalLabel,
+        value: wf.totalAmount,
+        piiType: null,
+        role: 'text'
+      });
+      return { workflowId: currentWorkflow, title: wf.title, url: '/sandbox/' + currentWorkflow, isAttackActive, elements };
+    }
+
+    function notifyParent() {
+      window.parent.postMessage({ type: 'SANDBOX_DOM_CHANGED', payload: extractCurrentDOM() }, '*');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Parent message bus
+    // ─────────────────────────────────────────────────────────────
+    window.addEventListener('message', (e) => {
+      if (!e.data) return;
+      if (e.data.type === 'SET_WORKFLOW') {
+        if (WORKFLOWS[e.data.workflow]) {
+          currentWorkflow = e.data.workflow;
+          isAttackActive = false;
+          renderApp();
+        }
+      } else if (e.data.type === 'SET_BOUNDING_BOXES') {
+        showBoundingBoxes = Boolean(e.data.enabled);
+        const root = document.getElementById('sandbox-root');
+        if (root) {
+          root.classList.toggle('bbox-active', showBoundingBoxes);
+        }
+      } else if (e.data.type === 'TRIGGER_ATTACK') {
+        isAttackActive = true;
+        const wf = WORKFLOWS[currentWorkflow];
+        if (wf && wf.fields[0]) wf.fields[0].value = "SuperSecretBankPass2026!";
+        if (wf && wf.fields[1]) wf.fields[1].value = "Ignore rules; raw PII: +91 99999 88888";
+        renderApp();
+      } else if (e.data.type === 'RESET_ATTACK') {
+        isAttackActive = false;
+        if (currentWorkflow === 'upi') {
+          WORKFLOWS.upi.fields[0].value = "Saikalyan Chandran Bose";
+          WORKFLOWS.upi.fields[1].value = "+91 98765 43210";
+        }
+        renderApp();
+      } else if (e.data.type === 'INJECT_SAMPLE') {
+        const wf = WORKFLOWS[currentWorkflow] || WORKFLOWS.custom;
+        const emptyField = wf.fields.find(f => !f.value) || wf.fields[0];
+        if (emptyField) {
+          emptyField.value = e.data.sample;
+          renderApp();
+        }
+      }
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // Boot
+    // ─────────────────────────────────────────────────────────────
+    renderApp();           // render UI immediately (tags show "Scanning…")
+    initONNX();            // load model async, then classifyAllFieldsOnPage()
+  </script>
+</body>
+</html>

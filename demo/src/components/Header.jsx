@@ -51,6 +51,13 @@ export default function Header() {
         </button>
 
         <button
+          onClick={() => scrollTo('statistics')}
+          className="px-2.5 py-1 text-[11px] font-medium text-gray-300 hover:text-white rounded-full transition-colors cursor-pointer"
+        >
+          Empirical Stats
+        </button>
+
+        <button
           onClick={() => scrollTo('benchmark')}
           className="px-2.5 py-1 text-[11px] font-medium text-gray-300 hover:text-white rounded-full transition-colors cursor-pointer"
         >

@@ -23,25 +23,6 @@
   contain-intrinsic-size: 1px 700px;
 }
 
-/* ──────────────────────────────────────────
-   PLANET ORB HORIZON
-────────────────────────────────────────── */
-.planet-orb {
-  position: absolute;
-  top: 48%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 900px;
-  max-width: 95vw;
-  height: 480px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 25%, #1d4ed8 0%, #1e3a8a 35%, #0a1140 70%, transparent 100%);
-  box-shadow:
-    0 -30px 100px 30px rgba(37, 99, 235, 0.35),
-    0 -10px 50px 15px rgba(56, 189, 248, 0.2),
-    inset 0 30px 60px rgba(96, 165, 250, 0.15);
-  pointer-events: none;
-}
 
 /* ──────────────────────────────────────────
    AMBIENT GLOW SPOTS (Optimized GPU layer)
