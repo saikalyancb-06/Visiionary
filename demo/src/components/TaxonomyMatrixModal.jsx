@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 export const PII_TAXONOMY_26 = [
   {
@@ -266,8 +267,22 @@ export const PII_TAXONOMY_26 = [
 export default function TaxonomyMatrixModal({ isOpen, onClose, onInjectSample }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
+  const [mounted, setMounted] = useState(false)
 
-  if (!isOpen) return null
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
+  if (!isOpen || !mounted) return null
 
   const categories = ['All', 'Financial', 'Credentials', 'Secrets', 'Government ID', 'Location', 'Communication', 'Identity', 'Biometrics', 'System']
 
@@ -280,9 +295,21 @@ export default function TaxonomyMatrixModal({ isOpen, onClose, onInjectSample })
     return matchesSearch && matchesCat
   })
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-4xl max-h-[90vh] bg-[#0c1328] border border-cyan-500/30 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.25)] flex flex-col overflow-hidden">
+  const scrollToStats = () => {
+    onClose()
+    const el = document.getElementById('statistics')
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const modalJSX = (
+    <div 
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <div 
+        className="relative w-full max-w-4xl max-h-[90vh] bg-[#0c1328] border border-cyan-500/40 rounded-2xl shadow-[0_0_60px_rgba(6,182,212,0.35)] flex flex-col overflow-hidden text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-[#080d1c] flex-shrink-0">
@@ -355,7 +382,7 @@ export default function TaxonomyMatrixModal({ isOpen, onClose, onInjectSample })
               <div className="space-y-1 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-white">{item.name}</span>
-                  <span className="px-1.5 py-0.2 rounded text-[10px] font-mono text-cyan-300 bg-cyan-950/60 border border-cyan-500/20">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-cyan-300 bg-cyan-950/60 border border-cyan-500/20">
                     {item.id}
                   </span>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${item.riskColor}`}>
@@ -395,11 +422,14 @@ export default function TaxonomyMatrixModal({ isOpen, onClose, onInjectSample })
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-white/10 bg-[#080d1c] flex items-center justify-between text-xs text-gray-400 flex-shrink-0">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>On-Device Neural & Heuristic Engine Active</span>
-          </div>
+        <div className="p-3 border-t border-white/10 bg-[#080d1c] flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400 flex-shrink-0">
+          <button
+            onClick={scrollToStats}
+            className="text-xs text-cyan-300 hover:text-cyan-200 font-semibold flex items-center gap-1 cursor-pointer"
+          >
+            <span>📊</span>
+            <span>View Full 26-Class Empirical Stats Table ↓</span>
+          </button>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-semibold cursor-pointer"
@@ -411,4 +441,6 @@ export default function TaxonomyMatrixModal({ isOpen, onClose, onInjectSample })
       </div>
     </div>
   )
+
+  return createPortal(modalJSX, document.body)
 }
